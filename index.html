@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Microsoft Quantum Development Kit Tutorials &middot; QCE 2026</title>
+<meta name="description" content="From Molecules to Logical Qubits: A Practical Tutorial on the Microsoft Quantum Development Kit (QDK) — IEEE Quantum Week (QCE 2026), Toronto. Add either session to your calendar.">
+<meta name="theme-color" content="#0b1020">
+<meta property="og:title" content="Microsoft Quantum Development Kit Tutorials · QCE 2026">
+<meta property="og:description" content="Two sessions on Sept 16, 2026 · Room 715B · Metro Toronto Convention Centre">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,&lt;svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22&gt;&lt;text y=%2226%22 font-size=%2226%22&gt;&#9883;&lt;/text&gt;&lt;/svg&gt;">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --bg: #0b1020;
+    --card: #151b31;
+    --card-hi: #1c2440;
+    --line: #2a3354;
+    --ink: #f2f5ff;
+    --muted: #9aa6c9;
+    --accent: #5ac8fa;
+    --accent-2: #7d6cff;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    padding: clamp(20px, 5vw, 48px) clamp(16px, 5vw, 24px) 48px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1000px 520px at 15% -10%, rgba(125,108,255,.30), transparent 60%),
+      radial-gradient(760px 460px at 95% 0%, rgba(90,200,250,.20), transparent 60%),
+      var(--bg);
+    display: flex;
+    justify-content: center;
+  }
+  main { width: 100%; max-width: 560px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+  .eyebrow::before {
+    content: ""; width: 22px; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  }
+  h1 { margin: 0 0 12px; font-size: clamp(23px, 5.6vw, 31px); line-height: 1.24; letter-spacing: -.015em; }
+  .subtitle { margin: 0 0 6px; color: var(--muted); font-size: 15px; line-height: 1.55; }
+  .venue { margin: 0 0 30px; color: var(--muted); font-size: 14px; line-height: 1.55; }
+  .venue strong { color: #cdd7f5; font-weight: 600; }
+  .prompt {
+    margin: 0 0 14px; font-size: 13px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  }
+  .session {
+    background: linear-gradient(160deg, var(--card-hi), var(--card));
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .session__head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .session__badge {
+    font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: #0b1020; padding: 5px 11px; border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  }
+  .session__part { font-size: 13px; color: var(--muted); }
+  .session__time { margin: 0 0 4px; font-size: 25px; font-weight: 700; letter-spacing: -.01em; }
+  .session__time span { font-size: 14px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+  .session__meta { margin: 0 0 18px; font-size: 14px; color: var(--muted); }
+  .session__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn {
+    flex: 1 1 auto; min-height: 48px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 13px 18px; border-radius: 11px;
+    font-size: 15px; font-weight: 600; text-decoration: none;
+    transition: transform .12s ease, filter .12s ease, background .12s ease;
+  }
+  .btn svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+  .btn--primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #080d1c; }
+  .btn--ghost { background: rgba(255,255,255,.06); color: var(--ink); border: 1px solid var(--line); }
+  .btn:active { transform: scale(.985); filter: brightness(1.06); }
+  @media (hover: hover) {
+    .btn--primary:hover { filter: brightness(1.08); }
+    .btn--ghost:hover { background: rgba(255,255,255,.11); }
+  }
+  .both { text-align: center; margin: 4px 0 30px; }
+  .both a { color: var(--muted); font-size: 14px; text-decoration: none; border-bottom: 1px dashed var(--line); padding-bottom: 2px; }
+  .both a:hover { color: var(--ink); }
+  .website {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    min-height: 56px; padding: 17px 20px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 14px;
+    color: var(--ink); text-decoration: none; font-weight: 600; font-size: 15px;
+  }
+  .website span { display: block; font-size: 12.5px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+  .website svg { width: 20px; height: 20px; flex-shrink: 0; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  @media (hover: hover) { .website:hover { background: rgba(255,255,255,.09); } }
+  footer { margin-top: 30px; text-align: center; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">IEEE Quantum Week &middot; QCE 2026</p>
+    <h1>Microsoft Quantum Development Kit Tutorials</h1>
+    <p class="subtitle">From Molecules to Logical Qubits: A Practical Tutorial on the Microsoft Quantum Development Kit (QDK)</p>
+    <p class="venue"><strong>Wednesday, September 16, 2026</strong><br>Room 715B &middot; Metro Toronto Convention Centre, Toronto</p>
+
+    <p class="prompt">Choose a session to add to your calendar</p>
+      <article class="session">
+        <div class="session__head">
+          <span class="session__badge">Session 1</span>
+          <span class="session__part">Morning</span>
+        </div>
+        <p class="session__time">10:00 – 11:30 AM <span>EDT</span></p>
+        <p class="session__meta">Wednesday, September 16, 2026 &middot; Room 715B</p>
+        <div class="session__actions">
+          <a class="btn btn--primary" href="session1.ics">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3M17 2v3M3.5 9h17M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M12 12.5v5M9.5 15h5"/></svg>
+            Add to calendar
+          </a>
+          <a class="btn btn--ghost" href="https://calendar.google.com/calendar/render?action=TEMPLATE&amp;text=QDK%20Tutorial%20%28Session%201%29:%20From%20Molecules%20to%20Logical%20Qubits&amp;dates=20260916T140000Z/20260916T153000Z&amp;details=Session%201%20of%20the%20Microsoft%20Quantum%20Development%20Kit%20tutorial%20at%20IEEE%20Quantum%20Week%20%28QCE%202026%29.%0A%0AFrom%20Molecules%20to%20Logical%20Qubits:%20A%20Practical%20Tutorial%20on%20the%20Microsoft%20Quantum%20Development%20Kit%20%28QDK%29%0A%0AFull%20details:%20https://qce.quantum.ieee.org/2026/qce26-schedule/tutorial-schedule/%231297-1&amp;location=Room%20715B%2C%20Metro%20Toronto%20Convention%20Centre%2C%20255%20Front%20St%20W%2C%20Toronto%2C%20ON%2C%20Canada&amp;ctz=America/Toronto" target="_blank" rel="noopener">Google Calendar</a>
+        </div>
+      </article>
+      <article class="session">
+        <div class="session__head">
+          <span class="session__badge">Session 2</span>
+          <span class="session__part">Afternoon</span>
+        </div>
+        <p class="session__time">1:00 – 2:30 PM <span>EDT</span></p>
+        <p class="session__meta">Wednesday, September 16, 2026 &middot; Room 715B</p>
+        <div class="session__actions">
+          <a class="btn btn--primary" href="session2.ics">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2v3M17 2v3M3.5 9h17M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v12A1.5 1.5 0 0 1 19 20.5H5A1.5 1.5 0 0 1 3.5 19V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M12 12.5v5M9.5 15h5"/></svg>
+            Add to calendar
+          </a>
+          <a class="btn btn--ghost" href="https://calendar.google.com/calendar/render?action=TEMPLATE&amp;text=QDK%20Tutorial%20%28Session%202%29:%20From%20Molecules%20to%20Logical%20Qubits&amp;dates=20260916T170000Z/20260916T183000Z&amp;details=Session%202%20of%20the%20Microsoft%20Quantum%20Development%20Kit%20tutorial%20at%20IEEE%20Quantum%20Week%20%28QCE%202026%29.%0A%0AFrom%20Molecules%20to%20Logical%20Qubits:%20A%20Practical%20Tutorial%20on%20the%20Microsoft%20Quantum%20Development%20Kit%20%28QDK%29%0A%0AFull%20details:%20https://qce.quantum.ieee.org/2026/qce26-schedule/tutorial-schedule/%231297-1&amp;location=Room%20715B%2C%20Metro%20Toronto%20Convention%20Centre%2C%20255%20Front%20St%20W%2C%20Toronto%2C%20ON%2C%20Canada&amp;ctz=America/Toronto" target="_blank" rel="noopener">Google Calendar</a>
+        </div>
+      </article>
+
+    <p class="both"><a href="both-sessions.ics">Or add both sessions at once</a></p>
+
+    <a class="website" href="https://qce.quantum.ieee.org/2026/qce26-schedule/tutorial-schedule/#1297-1" target="_blank" rel="noopener">
+      <span style="font-weight:600;color:var(--ink)">Full tutorial details
+        <span>View the official QCE 2026 schedule listing</span>
+      </span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+    </a>
+
+    <footer>Times shown in Eastern Daylight Time (EDT), local to Toronto.<br>Presented by the Microsoft Quantum Development Kit team.</footer>
+  </main>
+</body>
+</html>
