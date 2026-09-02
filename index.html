@@ -337,6 +337,8 @@
   }
   .section-lead { margin: 0; font-size: 16.5px; line-height: 1.62; color: var(--on-dark-dim); }
   .section-lead strong { color: var(--white); font-weight: 600; }
+  /* Keeps a sentence-opening word from being stranded alone at the end of a line */
+  .nowrap { white-space: nowrap; }
 
   /* The white card, mirroring the flyer's cyan-edged panel */
   .panel-card {
@@ -644,7 +646,7 @@ return count;</pre>
       <div class="section-head">
         <p class="eyebrow">01 / Sessions &amp; agenda</p>
         <h2 id="sessions-heading">What&rsquo;s covered, and when</h2>
-        <p class="section-lead">Two <strong>different</strong> 90-minute sessions run on Wednesday, September 16. Add whichever you plan to attend to your calendar &mdash; or add both.</p>
+        <p class="section-lead">Two <strong>different</strong> 90-minute sessions run on Wednesday, September 16. <span class="nowrap">Add whichever</span> you plan to attend to your calendar &mdash; or add both.</p>
       </div>
 
       <div class="panel-card">
