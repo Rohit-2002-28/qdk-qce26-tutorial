@@ -470,30 +470,21 @@
     align-items: start;
   }
   @media (max-width: 860px) { .info-grid { grid-template-columns: 1fr; } }
-  /* No enclosing card here - the content sits straight on the dark section,
-     so every colour below is the light-on-dark counterpart of the card version. */
-  .info-body { padding-top: 4px; }
-  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--on-dark-dim); }
-  .info-body > p:first-child strong { color: var(--white); font-weight: 700; }
-  .req-list { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
-  .req-list li {
-    padding: 16px 18px;
-    background: rgba(25, 36, 81, .58);
-    border: 1px solid var(--dark-line);
-    border-radius: 12px;
-  }
+  .info-body { padding: clamp(24px, 3vw, 32px); }
+  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--ink-2); }
+  .info-body > p:first-child strong { color: var(--blue-900); font-weight: 700; }
+
+  /* Plain labelled rows inside the card - hairline rules instead of nested boxes,
+     so the section reads as one panel rather than boxes within a box. */
+  .req-list { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 20px; }
+  .req-list li { padding-top: 20px; border-top: 1px solid var(--line); }
   .req-list strong {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+    display: block; margin-bottom: 6px;
     font-family: var(--font-display);
     font-size: 12.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--cyan);
+    color: var(--blue-900);
   }
-  .req-list strong::before {
-    content: ""; flex-shrink: 0;
-    width: 9px; height: 9px;
-    background: var(--cyan);
-  }
-  .req-list span { font-size: 15px; line-height: 1.55; color: var(--on-dark-dim); }
+  .req-list span { display: block; font-size: 15.5px; line-height: 1.58; color: var(--ink-2); }
 
   /* ---------------- Resources ---------------- */
 
@@ -751,7 +742,7 @@ return count;</pre>
         <p class="section-lead">Come as you are &mdash; or bring a laptop if you want to follow along hands-on.</p>
       </div>
 
-      <div class="info-body">
+      <div class="panel-card info-body">
         <p>The tutorial is aimed at <strong>software developers</strong>, <strong>computational scientists</strong>, <strong>graduate students</strong>, and <strong>industry practitioners</strong>.</p>
         <ul class="req-list">
           <li>
