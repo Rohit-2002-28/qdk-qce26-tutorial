@@ -238,8 +238,10 @@
     line-height: .98; letter-spacing: -.02em;
     text-transform: uppercase;
     color: var(--white);
-    text-wrap: balance;
   }
+  /* One word per line so the Q / D / K initials always stack into "QDK" */
+  .hero h1 .hl-line { display: block; }
+  .hero h1 .hl-key { color: var(--cyan); }
   .hero-sub {
     margin: 0 0 26px; max-width: 44ch;
     font-size: clamp(16px, 1.7vw, 19px); line-height: 1.5;
@@ -560,7 +562,13 @@ return count;</pre>
       <div class="hero-grid">
         <div class="hero-copy">
           <p class="eyebrow">IEEE Quantum Week 2026 &middot; QCE26 Tutorial</p>
-          <h1 id="page-heading">The Microsoft Quantum Development Kit</h1>
+          <h1 id="page-heading">
+            <span class="hl-line">The</span>
+            <span class="hl-line">Microsoft</span>
+            <span class="hl-line"><span class="hl-key">Q</span>uantum</span>
+            <span class="hl-line"><span class="hl-key">D</span>evelopment</span>
+            <span class="hl-line"><span class="hl-key">K</span>it</span>
+          </h1>
           <p class="hero-sub">From Molecules to Logical Qubits: A Practical Tutorial on the Microsoft Quantum Development Kit (QDK)</p>
         </div>
 
