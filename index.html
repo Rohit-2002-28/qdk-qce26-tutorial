@@ -248,12 +248,13 @@
 
   .hero-panel {
     padding: 22px 24px;
-    background: rgba(10, 22, 46, .46);
-    border: 1px solid rgba(255, 255, 255, .18);
+    background: rgba(6, 19, 40, .58);
+    border: 1px solid rgba(255, 255, 255, .24);
     /* impeccable-disable side-tab -- deliberate: reproduces the cyan left edge
        on the white panel of the printed QCE 2026 flyer this page pairs with. */
     border-left: 4px solid var(--cyan);
     border-radius: 14px;
+    box-shadow: 0 14px 34px rgba(2, 7, 20, .34);
     -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   }
   .panel-label {
@@ -302,23 +303,20 @@
   }
   @media (max-width: 860px) { .highlights { grid-template-columns: 1fr; } }
   .highlight {
-    padding: 20px;
-    background: rgba(255, 255, 255, .09);
-    border: 1px solid rgba(255, 255, 255, .16);
+    padding: 22px;
+    background: rgba(6, 19, 40, .58);
+    border: 1px solid rgba(255, 255, 255, .24);
     border-radius: 14px;
-  }
-  .highlight-dot {
-    display: block; width: 13px; height: 13px; margin-bottom: 13px;
-    background: var(--ms-blue);
-    box-shadow: 0 0 0 3px rgba(0, 119, 212, .22);
+    box-shadow: 0 14px 34px rgba(2, 7, 20, .34);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
   }
   .highlight h3 {
-    margin: 0 0 7px;
+    margin: 0 0 8px;
     font-family: var(--font-display);
-    font-size: 16.5px; font-weight: 700; line-height: 1.3;
+    font-size: 17px; font-weight: 700; line-height: 1.3;
     color: var(--white);
   }
-  .highlight p { margin: 0; font-size: 14.5px; line-height: 1.55; color: rgba(255, 255, 255, .80); }
+  .highlight p { margin: 0; font-size: 14.5px; line-height: 1.55; color: rgba(255, 255, 255, .82); }
 
   /* ---------------- Sections ---------------- */
 
@@ -585,17 +583,14 @@ return count;</pre>
 
       <div class="highlights">
         <article class="highlight">
-          <span class="highlight-dot" aria-hidden="true"></span>
           <h3>Modern Quantum Development, Built for Today</h3>
           <p>Advanced simulation, multi-language workflows, and productivity tools.</p>
         </article>
         <article class="highlight">
-          <span class="highlight-dot" aria-hidden="true"></span>
           <h3>Build End-to-End Quantum Applications with QDK</h3>
           <p>Build quantum solutions with QDK for chemistry and analytics.</p>
         </article>
         <article class="highlight">
-          <span class="highlight-dot" aria-hidden="true"></span>
           <h3>AI-Powered at Every Step</h3>
           <p>Copilot-powered assistance from learning and coding to execution and experimentation.</p>
         </article>
