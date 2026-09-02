@@ -234,7 +234,7 @@
     margin: 0 0 18px;
     font-family: var(--font-display);
     font-weight: 800; font-stretch: 87.5%;
-    font-size: clamp(38px, 7.2vw, 74px);
+    font-size: clamp(30px, 5.2vw, 54px);
     line-height: .98; letter-spacing: -.02em;
     text-transform: uppercase;
     color: var(--white);
@@ -418,6 +418,30 @@
   .agenda-head p { margin: 0; font-size: 13.5px; color: var(--ink-3); }
   .agenda-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   @media (max-width: 760px) { .agenda-grid { grid-template-columns: 1fr; } }
+
+  /* Each session gets its own labelled row of blocks, split by the midday break */
+  .agenda-session {
+    margin: 0 0 10px;
+    display: flex; align-items: center; gap: 9px;
+    font-family: var(--font-display);
+    font-size: 12.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--blue-900);
+  }
+  .agenda-session::before {
+    content: ""; flex-shrink: 0;
+    width: 9px; height: 9px;
+    background: var(--ms-blue);
+  }
+  .agenda-session + .agenda-grid { margin-bottom: 0; }
+  .agenda-break {
+    display: flex; align-items: center; gap: 14px;
+    margin: 20px 0;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .agenda-break::before, .agenda-break::after {
+    content: ""; flex: 1 1 auto; height: 1px; background: var(--line);
+  }
   .agenda-card {
     padding: 18px;
     background: var(--white);
@@ -446,27 +470,30 @@
     align-items: start;
   }
   @media (max-width: 860px) { .info-grid { grid-template-columns: 1fr; } }
-  .info-body { padding: clamp(22px, 3vw, 30px); }
-  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--ink-2); }
-  .info-body > p:first-child strong { color: var(--blue-900); font-weight: 700; }
+  /* No enclosing card here - the content sits straight on the dark section,
+     so every colour below is the light-on-dark counterpart of the card version. */
+  .info-body { padding-top: 4px; }
+  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--on-dark-dim); }
+  .info-body > p:first-child strong { color: var(--white); font-weight: 700; }
   .req-list { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 12px; }
   .req-list li {
     padding: 16px 18px;
-    background: var(--row);
+    background: rgba(25, 36, 81, .58);
+    border: 1px solid var(--dark-line);
     border-radius: 12px;
   }
   .req-list strong {
     display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
     font-family: var(--font-display);
     font-size: 12.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--blue-900);
+    color: var(--cyan);
   }
   .req-list strong::before {
     content: ""; flex-shrink: 0;
     width: 9px; height: 9px;
-    background: var(--ms-blue);
+    background: var(--cyan);
   }
-  .req-list span { font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+  .req-list span { font-size: 15px; line-height: 1.55; color: var(--on-dark-dim); }
 
   /* ---------------- Resources ---------------- */
 
@@ -515,6 +542,20 @@
   }
   .footer-inner p { margin: 0 0 4px; font-size: 14.5px; line-height: 1.6; color: var(--on-dark-dim); }
   .footer-inner p.strong { color: var(--white); font-weight: 600; font-size: 15.5px; }
+
+  .footer-social { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .social {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-height: 44px; padding: 10px 16px;
+    background: rgba(25, 36, 81, .58);
+    border: 1px solid var(--dark-line);
+    border-radius: 11px;
+    font-size: 14.5px; font-weight: 600;
+    color: var(--on-dark); text-decoration: none;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .social:hover, .social:focus-visible { background: rgba(25, 36, 81, .92); border-color: rgba(21, 221, 243, .5); color: var(--white); }
+  .social svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }
 </style>
 </head>
 <body id="top">
@@ -612,7 +653,7 @@ return count;</pre>
       <div class="section-head">
         <p class="eyebrow">01 / Sessions &amp; agenda</p>
         <h2 id="sessions-heading">Choose your preferred time</h2>
-        <p class="section-lead">The same tutorial runs <strong>twice</strong> on Wednesday, September 16 &mdash; you only need to attend one. Pick the slot that fits your schedule and add it to your calendar.</p>
+        <p class="section-lead">Two <strong>different</strong> 90-minute sessions run on Wednesday, September 16. Add whichever you plan to attend to your calendar &mdash; or add both.</p>
       </div>
 
       <div class="panel-card">
@@ -650,26 +691,49 @@ return count;</pre>
           </article>
         </div>
 
-        <p class="session-foot"><a class="text-link" href="both-sessions.ics">Or hold both time slots in your calendar</a></p>
+        <p class="session-foot"><a class="text-link" href="both-sessions.ics">Attending both? Add the full day in one go</a></p>
 
         <div class="agenda">
           <div class="agenda-head">
-            <h3>Session agenda</h3>
-            <p>90 minutes &middot; identical in both sessions</p>
+            <h3>Tutorial agenda</h3>
+            <p>Two 90-minute sessions &middot; different material in each</p>
           </div>
+
+          <p class="agenda-session">Session 1 &middot; 10:00 &ndash; 11:30 AM</p>
           <div class="agenda-grid">
             <article class="agenda-card">
-              <span class="card-number">01 / 00&ndash;30 min</span>
+              <span class="card-number">1.1 / 00&ndash;30 min</span>
               <h4>TBD</h4>
               <p>TBD</p>
             </article>
             <article class="agenda-card">
-              <span class="card-number">02 / 30&ndash;60 min</span>
+              <span class="card-number">1.2 / 30&ndash;60 min</span>
               <h4>TBD</h4>
               <p>TBD</p>
             </article>
             <article class="agenda-card">
-              <span class="card-number">03 / 60&ndash;90 min</span>
+              <span class="card-number">1.3 / 60&ndash;90 min</span>
+              <h4>TBD</h4>
+              <p>TBD</p>
+            </article>
+          </div>
+
+          <p class="agenda-break">Break &middot; 11:30 AM &ndash; 1:00 PM</p>
+
+          <p class="agenda-session">Session 2 &middot; 1:00 &ndash; 2:30 PM</p>
+          <div class="agenda-grid">
+            <article class="agenda-card">
+              <span class="card-number">2.1 / 00&ndash;30 min</span>
+              <h4>TBD</h4>
+              <p>TBD</p>
+            </article>
+            <article class="agenda-card">
+              <span class="card-number">2.2 / 30&ndash;60 min</span>
+              <h4>TBD</h4>
+              <p>TBD</p>
+            </article>
+            <article class="agenda-card">
+              <span class="card-number">2.3 / 60&ndash;90 min</span>
               <h4>TBD</h4>
               <p>TBD</p>
             </article>
@@ -687,7 +751,7 @@ return count;</pre>
         <p class="section-lead">Come as you are &mdash; or bring a laptop if you want to follow along hands-on.</p>
       </div>
 
-      <div class="panel-card info-body">
+      <div class="info-body">
         <p>The tutorial is aimed at <strong>software developers</strong>, <strong>computational scientists</strong>, <strong>graduate students</strong>, and <strong>industry practitioners</strong>.</p>
         <ul class="req-list">
           <li>
@@ -743,6 +807,17 @@ return count;</pre>
     <p class="strong">From Molecules to Logical Qubits: A Practical Tutorial on the Microsoft Quantum Development Kit (QDK)</p>
     <p>Wednesday, September 16, 2026 &middot; Room 715B &middot; Metro Toronto Convention Centre, 255 Front St W, Toronto, ON</p>
     <p>All times shown in Eastern Daylight Time (EDT), local to Toronto.</p>
+
+    <div class="footer-social">
+      <a class="social" href="https://www.youtube.com/playlist?list=PLlrxD0HtieHj3mBWaxRbKBGil8Snm6LK2" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>
+        YouTube
+      </a>
+      <a class="social" href="https://www.instagram.com/quantumirl/" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.1A6.7 6.7 0 1 0 18.7 12 6.7 6.7 0 0 0 12 5.3Zm0 11A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3ZM18.9 4a1.6 1.6 0 1 0 1.6 1.6A1.6 1.6 0 0 0 18.9 4Z"/></svg>
+        Instagram
+      </a>
+    </div>
   </div>
 </footer>
 
