@@ -306,19 +306,18 @@
   @media (max-width: 860px) { .highlights { grid-template-columns: 1fr; } }
   .highlight {
     padding: 22px;
-    background: rgba(6, 19, 40, .58);
-    border: 1px solid rgba(255, 255, 255, .24);
+    background: var(--white);
+    border: 1px solid rgba(10, 42, 93, .1);
     border-radius: 14px;
-    box-shadow: 0 14px 34px rgba(2, 7, 20, .34);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    box-shadow: 0 16px 38px rgba(2, 7, 20, .28);
   }
   .highlight h3 {
     margin: 0 0 8px;
     font-family: var(--font-display);
     font-size: 17px; font-weight: 700; line-height: 1.3;
-    color: var(--white);
+    color: var(--blue-900);
   }
-  .highlight p { margin: 0; font-size: 14.5px; line-height: 1.55; color: rgba(255, 255, 255, .82); }
+  .highlight p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
 
   /* ---------------- Sections ---------------- */
 
@@ -337,8 +336,6 @@
   }
   .section-lead { margin: 0; font-size: 16.5px; line-height: 1.62; color: var(--on-dark-dim); }
   .section-lead strong { color: var(--white); font-weight: 600; }
-  /* Keeps a sentence-opening word from being stranded alone at the end of a line */
-  .nowrap { white-space: nowrap; }
 
   /* The white card, mirroring the flyer's cyan-edged panel */
   .panel-card {
@@ -466,27 +463,21 @@
 
   /* ---------------- Audience ---------------- */
 
-  .info-grid {
-    display: grid; gap: clamp(20px, 3vw, 34px);
-    grid-template-columns: minmax(0, .82fr) minmax(0, 1.18fr);
-    align-items: start;
-  }
-  @media (max-width: 860px) { .info-grid { grid-template-columns: 1fr; } }
-  .info-body { padding: clamp(24px, 3vw, 32px); }
-  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--ink-2); }
-  .info-body > p:first-child strong { color: var(--blue-900); font-weight: 700; }
+  .info-body { max-width: 74ch; }
+  .info-body > p:first-child { margin-top: 0; font-size: 16.5px; line-height: 1.62; color: var(--on-dark-dim); }
+  .info-body > p:first-child strong { color: var(--white); font-weight: 700; }
 
-  /* Plain labelled rows inside the card - hairline rules instead of nested boxes,
-     so the section reads as one panel rather than boxes within a box. */
+  /* Plain labelled rows - hairline rules instead of nested boxes, so the
+     section reads as one continuous column rather than boxes within a box. */
   .req-list { list-style: none; margin: 24px 0 0; padding: 0; display: grid; gap: 20px; }
-  .req-list li { padding-top: 20px; border-top: 1px solid var(--line); }
+  .req-list li { padding-top: 20px; border-top: 1px solid var(--dark-line); }
   .req-list strong {
     display: block; margin-bottom: 6px;
     font-family: var(--font-display);
     font-size: 12.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--blue-900);
+    color: var(--cyan);
   }
-  .req-list span { display: block; font-size: 15.5px; line-height: 1.58; color: var(--ink-2); }
+  .req-list span { display: block; font-size: 15.5px; line-height: 1.58; color: var(--on-dark-dim); }
 
   /* ---------------- Resources ---------------- */
 
@@ -494,7 +485,7 @@
   @media (max-width: 860px) { .resource-grid { grid-template-columns: 1fr; } }
   .resource {
     display: flex; flex-direction: column; gap: 8px;
-    padding: 24px;
+    padding: 26px 24px;
     background: rgba(25, 36, 81, .58);
     border: 1px solid var(--dark-line);
     border-radius: 14px;
@@ -502,22 +493,16 @@
     transition: background .15s ease, border-color .15s ease, transform .15s ease;
   }
   .resource:hover { background: rgba(25, 36, 81, .92); border-color: rgba(21, 221, 243, .5); transform: translateY(-2px); }
-  .resource-kind {
-    font-family: var(--font-mono);
-    font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--cyan);
-  }
   .resource h3 {
     margin: 0;
     font-family: var(--font-display);
     font-size: 18px; font-weight: 700; line-height: 1.25;
     color: var(--white);
   }
-  .resource p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--on-dark-dim); }
-  .resource-go {
-    margin-top: auto; padding-top: 12px;
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 14px; font-weight: 700; color: var(--cyan);
+  .resource p {
+    margin: 0;
+    font-size: 14.5px; line-height: 1.5; color: var(--cyan);
+    overflow-wrap: anywhere;
   }
 
   /* ---------------- Footer ---------------- */
@@ -646,7 +631,7 @@ return count;</pre>
       <div class="section-head">
         <p class="eyebrow">01 / Sessions &amp; agenda</p>
         <h2 id="sessions-heading">What&rsquo;s covered, and when</h2>
-        <p class="section-lead">Two <strong>different</strong> 90-minute sessions run on Wednesday, September 16. <span class="nowrap">Add whichever</span> you plan to attend to your calendar &mdash; or add both.</p>
+        <p class="section-lead">Two <strong>complementary</strong> 90-minute sessions run on Wednesday, September 16.</p>
       </div>
 
       <div class="panel-card">
@@ -689,24 +674,24 @@ return count;</pre>
         <div class="agenda">
           <div class="agenda-head">
             <h3>Tutorial agenda</h3>
-            <p>Two 90-minute sessions &middot; different material in each</p>
+            <p>Two 90-minute sessions &middot; complementary material in each</p>
           </div>
 
           <p class="agenda-session">Session 1 &middot; 10:00 &ndash; 11:30 AM</p>
           <div class="agenda-grid">
             <article class="agenda-card">
               <span class="card-number">1.1 / 00&ndash;30 min</span>
-              <h4>Installing the QDK and AI Features</h4>
-              <p>Set up the QDK in VS Code and meet its Copilot-powered assistance.</p>
+              <h4>Installing the QDK &amp; AI Support</h4>
+              <p>Set up QDK in VS Code and enhance your experience with Copilot-powered assistance.</p>
             </article>
             <article class="agenda-card">
               <span class="card-number">1.2 / 30&ndash;60 min</span>
-              <h4>Simulators in the QDK</h4>
-              <p>Tour the built-in simulators and when to reach for each one.</p>
+              <h4>Core QDK Features</h4>
+              <p>Build quantum programs across languages, run them on simulators, and estimate resources.</p>
             </article>
             <article class="agenda-card">
               <span class="card-number">1.3 / 60&ndash;90 min</span>
-              <h4>The QDK Learning Experience</h4>
+              <h4>QDK Learning Experience</h4>
               <p>Guided exercises and samples that take you from setup to your first working program.</p>
             </article>
           </div>
@@ -718,17 +703,17 @@ return count;</pre>
             <article class="agenda-card">
               <span class="card-number">2.1 / 00&ndash;30 min</span>
               <h4>QDK for Chemistry</h4>
-              <p>Take a molecule from setup to a running quantum program.</p>
+              <p>End-to-end workflow for mapping chemistry to quantum computing.</p>
             </article>
             <article class="agenda-card">
               <span class="card-number">2.2 / 30&ndash;60 min</span>
               <h4>QDK for Analytics</h4>
-              <p>Apply the same toolchain to analytics and optimization problems.</p>
+              <p>Quantum algorithms, data-science tools, and validation workflows for large-scale data analysis.</p>
             </article>
             <article class="agenda-card">
               <span class="card-number">2.3 / 60&ndash;90 min</span>
-              <h4>The Chemistry Learning Experience</h4>
-              <p>Hands-on time with the chemistry samples and notebooks.</p>
+              <h4>Chemistry Learning Experience</h4>
+              <p>Guided exercises and samples.</p>
             </article>
           </div>
         </div>
@@ -737,14 +722,13 @@ return count;</pre>
   </section>
 
   <section id="audience" class="section" aria-labelledby="audience-heading">
-    <div class="container info-grid">
-      <div class="section-head" style="margin-bottom:0">
+    <div class="container">
+      <div class="section-head">
         <p class="eyebrow">02 / Information</p>
         <h2 id="audience-heading">Target audience</h2>
-        <p class="section-lead">Come as you are &mdash; or bring a laptop if you want to follow along hands-on.</p>
       </div>
 
-      <div class="panel-card info-body">
+      <div class="info-body">
         <p>The tutorial is aimed at <strong>software developers</strong>, <strong>computational scientists</strong>, <strong>graduate students</strong>, and <strong>industry practitioners</strong>.</p>
         <ul class="req-list">
           <li>
@@ -768,25 +752,19 @@ return count;</pre>
       </div>
 
       <div class="resource-grid">
-        <a class="resource" href="https://qce.quantum.ieee.org/2026/qce26-schedule/tutorial-schedule/#1297-1" target="_blank" rel="noopener">
-          <span class="resource-kind">QCE 2026</span>
-          <h3>Official tutorial listing</h3>
-          <p>The full entry on the IEEE Quantum Week tutorial schedule.</p>
-          <span class="resource-go">View schedule <span aria-hidden="true">&#8599;</span></span>
+        <a class="resource" href="https://quantum.microsoft.com/" target="_blank" rel="noopener">
+          <h3>Learn More</h3>
+          <p>Learn more on quantum.microsoft.com</p>
         </a>
 
         <a class="resource" href="https://github.com/microsoft/qdk" target="_blank" rel="noopener">
-          <span class="resource-kind">GitHub</span>
-          <h3>microsoft/qdk</h3>
-          <p>The Microsoft Quantum Development Kit &mdash; Q#, the VS Code extension, and the Python packages.</p>
-          <span class="resource-go">Open repository <span aria-hidden="true">&#8599;</span></span>
+          <h3>QDK on GitHub</h3>
+          <p>microsoft/qdk</p>
         </a>
 
         <a class="resource" href="https://github.com/microsoft/qdk-chemistry" target="_blank" rel="noopener">
-          <span class="resource-kind">GitHub</span>
-          <h3>microsoft/qdk-chemistry</h3>
-          <p>Quantum chemistry tooling and end-to-end workflows built on the QDK.</p>
-          <span class="resource-go">Open repository <span aria-hidden="true">&#8599;</span></span>
+          <h3>QDK for Chemistry on GitHub</h3>
+          <p>microsoft/qdk-chemistry</p>
         </a>
       </div>
     </div>
