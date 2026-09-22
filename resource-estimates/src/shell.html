@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+THESIS: A resource ledger with a shared briefing, not a wall of KPI cards.
+OWN-WORLD: White working surfaces, graphite text, cool gray rules, one blue accent,
+Segoe UI, exact tabular numbers, native controls, and restrained rectangular forms.
+STORY: Read the exceptions and next action, inspect a dated candidate, and share
+that exact published snapshot. Engineers maintain counts and one written briefing.
+FIRST VIEWPORT: A compact briefing precedes the ledger and selected candidate;
+the physical target and next action precede both logical-resource time trends.
+FORM: Extend the incumbent master/detail workspace. Separate comparison and
+engineering tabs keep additional plots and writing tools out of the overview.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Resource estimates - design preview</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23185185'/%3E%3Cpath d='M8 23V15M16 23V8M24 23V12' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
+  <style>
+/* INLINE_STYLES */
+</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to dashboard content</a>
+  <div class="preview-bar">
+    <div class="preview-bar-inner">
+      <div><strong>Public review demo</strong><span class="preview-caption">Dummy data only. No sign-in or live storage. Edits reset on reload.</span></div>
+      <nav class="demo-switch" aria-label="Demo view, not access control">
+        <span>Demo view</span>
+        <a href="#overview" data-mode="leadership">Leadership</a>
+        <a href="#edit" data-mode="engineering">Engineering</a>
+      </nav>
+      <details class="preview-explanation">
+        <summary>What is simulated?</summary>
+        <div>
+          <strong>A public review mockup, not a production application.</strong>
+          <p>All names, counts, targets, timing estimates, and notes are fictional. Do not enter real information.</p>
+          <p>Save updates changes this open page only. Reloading or resetting restores the example data.</p>
+          <p>Production access would use Microsoft Entra ID and server-enforced viewer/editor roles. Those controls are not implemented here.</p>
+        </div>
+      </details>
+    </div>
+  </div>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="brand" href="#overview" data-route="overview" aria-label="Resource estimates overview">
+        <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="6" fill="currentColor"/><path d="M7 20v-6m7 6V7m7 13V11" stroke="white" stroke-width="2.3" stroke-linecap="round"/></svg>
+        <span>Resource estimates</span>
+      </a>
+      <div class="header-actions">
+        <button type="button" class="button primary" id="share-action" data-action="share">Copy view link</button>
+      </div>
+    </div>
+    <nav class="nav-inner" aria-label="Dashboard">
+      <div class="main-nav" id="view-navigation"></div>
+      <span class="guide-link" id="view-description"></span>
+    </nav>
+  </header>
+  <main id="main" tabindex="-1"></main>
+  <footer class="app-footer">
+    <span>Public review demo <span aria-hidden="true">&middot;</span> All figures are synthetic <span aria-hidden="true">&middot;</span> Reference date: 22 Sep 2026</span>
+    <button type="button" data-action="reset" class="text-button">Reset demo</button>
+  </footer>
+  <div class="sr-only" role="status" aria-live="polite" id="announcement"></div>
+  <dialog id="share-dialog" aria-labelledby="share-title" aria-describedby="share-copy">
+    <h2 id="share-title">Published snapshot link</h2>
+    <p id="share-copy"></p>
+    <label class="field"><span>Link to copy</span><input type="text" id="share-url" readonly></label>
+    <p id="share-status" role="status"></p>
+    <div class="dialog-actions"><button type="button" class="button" data-action="close-share">Close</button><button type="button" class="button primary" data-action="copy-share">Copy link</button></div>
+  </dialog>
+  <dialog id="discard-dialog" aria-labelledby="discard-title" aria-describedby="discard-copy">
+    <h2 id="discard-title">Discard your unsaved changes?</h2>
+    <p id="discard-copy">Your edits have not been saved. The previously saved demo figures will remain unchanged.</p>
+    <div class="dialog-actions">
+      <button type="button" class="button" id="keep-editing">Keep editing</button>
+      <button type="button" class="button primary" id="discard-edits">Discard changes</button>
+    </div>
+  </dialog>
+  <script>
+/* INLINE_DATA */
+</script>
+  <script>
+/* INLINE_APP */
+</script>
+</body>
+</html>
