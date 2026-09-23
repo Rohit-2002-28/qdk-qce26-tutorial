@@ -361,18 +361,11 @@ dialog p { color: var(--muted); font-size: 13px; }
 .scatter text { font: 13px "Segoe UI", system-ui, sans-serif; fill: var(--muted); }
 .scatter .axis-label { fill: var(--ink); font-weight: 600; }
 .scatter .grid-line { stroke: var(--rule); }
-.scatter .marker-point { fill: var(--blue); stroke: white; stroke-width: 1; }
-.scatter .point-leader { stroke: var(--muted); stroke-width: 1; }
-.scatter .point-label { fill: white; stroke: var(--rule-strong); rx: 3; }
-.scatter .point-code { fill: var(--ink); font-size: 12px; font-weight: 600; }
 .scatter [role="button"] { cursor: pointer; }
-.scatter [role="button"]:hover .point-label, .scatter [aria-pressed="true"] .point-label { fill: var(--blue-soft); stroke: var(--blue); }
 .scatter [role="button"]:focus { outline: none; }
-.scatter [role="button"]:focus-visible .point-label { stroke: #072b50; stroke-width: 3; }
-.scatter [role="button"]:focus-visible .marker-point { stroke: #072b50; stroke-width: 3; }
-.scatter [aria-pressed="true"] .marker-point { stroke: #072b50; stroke-width: 2; }
+.scatter [role="button"]:focus-visible .point-hit, .scatter [aria-pressed="true"] .point-hit { stroke: var(--ink); stroke-width: 1.5; }
 .point-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px; }
-.point-picker button { border: 1px solid var(--rule-strong); background: white; border-radius: 4px; min-height: 34px; padding: 5px 9px; font-size: 13px; color: var(--ink); max-width: 100%; white-space: normal; text-align: left; }
+.point-picker button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--rule-strong); background: white; border-radius: 4px; min-height: 34px; padding: 5px 9px; font-size: 13px; color: var(--ink); max-width: 100%; white-space: normal; text-align: left; }
 .point-picker button:hover { background: var(--blue-light); }
 .point-picker button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-soft); font-weight: 600; }
 .point-detail { border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; min-height: 138px; }

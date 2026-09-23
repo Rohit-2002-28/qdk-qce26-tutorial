@@ -68,7 +68,7 @@ async function suppliedData() {
     for (const item of data.workloads) {
       assert.equal(item.snapshots.length, 1, "No fabricated historical samples.");
       const record = item.snapshots[0];
-      assert.equal(record.asOf, null);
+      assert.equal(record.asOf, "2026-09-04");
       assert.equal(record.savedAt, null);
       assert.equal(record.owner, "");
       assert.equal(record.context.runtimeHours, "");
@@ -84,8 +84,9 @@ async function suppliedData() {
     const order = await page.locator(".candidate-controls select").evaluateAll(selects => selects.map(select => select.id));
     assert.deepEqual(order, ["candidate-select", "system-filter"]);
     assert.equal(await page.locator("#candidate-select option").count(), 8);
-    assert.match(await text(page, ".estimate-meta"), /Spin Dynamics Floquet-3x3.*Estimate date not supplied/);
-    assert.match(await text(page, ".chart-caption"), /No historical change is inferred/);
+    assert.match(await text(page, ".estimate-meta"), /Spin Dynamics Floquet-3x3.*4 Sept? 2026/);
+    assert.match(await text(page, ".chart-caption"), /One dated snapshot/);
+    assert.ok(!/\b[134][abc]\b|\bSystem [1-4]\b/.test(await text(page, ".candidate-controls")), "Application and model labels must use names only.");
     assert.equal(await page.locator(".chart .chart-point").count(), 2);
     assert.equal(await page.locator(".roadmap-stages > li").count(), 5);
     assert.match(await text(page, ".roadmap-panel"), /Application Roadmap and Progress/);
@@ -142,7 +143,7 @@ async function links() {
     const shared = new URL(await page.inputValue("#share-url"));
     assert.equal(shared.hostname, "rohit-2002-28.github.io");
     assert.equal(shared.searchParams.get("candidate"), "3b");
-    assert.equal(shared.searchParams.get("snapshot"), "source-3b-v1");
+    assert.equal(shared.searchParams.get("snapshot"), "source-3b-v2");
     await page.locator('[data-action="close-share"]').click();
     for (const params of [{ candidate: "App 2c" }, { snapshot: "does-not-exist" }, { candidate: "3b", system: "1" }, { snapshot: "" }, { overview: "unknown" }]) {
       await page.goto(urlFor("overview", params));
@@ -163,6 +164,7 @@ async function plotMapping() {
       })));
       const axes = await page.locator(`[data-scatter="${kind}"]`).evaluate(svg => ({ ...svg.dataset, width: svg.viewBox.baseVal.width, height: svg.viewBox.baseVal.height }));
       assert.equal(points.length, 8);
+      assert.ok(!/\b[134][abc]\b|\bSystem [1-4]\b/.test((await page.locator(".point-picker").allTextContents()).join(" ")));
       for (const point of points) {
         assert.equal(point.x, expected[point.id][kind === "qubits" ? 5 : 0]);
         assert.equal(point.y, expected[point.id][kind === "qubits" ? 6 : 1]);
@@ -182,9 +184,10 @@ async function plotMapping() {
     assert.equal(await page.inputValue("#candidate-select"), "4c");
     await page.selectOption("#overview-mode", "global");
     assert.equal(await page.locator("[data-global-chart] g[data-global-id]").count(), 8);
-    assert.equal(await page.locator("[data-global-chart] path[data-series]").count(), 0, "No invented baseline trend line.");
+    assert.equal(await page.locator("[data-global-chart] path[data-series]").count(), 0, "No invented trend from one date.");
     const colors = await page.locator("[data-global-chart] g[data-global-id]").evaluateAll(points => points.map(point => point.getAttribute("stroke")));
     assert.equal(new Set(colors).size, 8);
+    assert.ok(!/\b[134][abc]\b|\bSystem [1-4]\b/.test(await text(page, ".series-legend")));
     for (const [metric, index] of [["logicalOps", 0], ["logicalQubits", 5]]) {
       await page.selectOption("#global-metric", metric);
       const points = await page.locator("[data-global-chart] g[data-global-id]").evaluateAll(points => points.map(point => ({ id: point.dataset.globalId, value: point.dataset.value, cy: Number(point.dataset.y) })));
@@ -216,6 +219,7 @@ async function numericalFixtures() {
     await context.addInitScript(() => {
       Object.defineProperty(window, "RESOURCE_DATA", { configurable: true, set(value) {
         const data = structuredClone(value);
+        for (const item of data.workloads) item.snapshots[0].asOf = null;
         const base = data.workloads[0].snapshots[0];
         const first = structuredClone(base);
         Object.assign(first, { id: "test-first", asOf: "2026-09-01", local: true });
@@ -349,7 +353,7 @@ async function privateWorkspace() {
     const localUrl = page.url();
     await page.locator("#share-action").click();
     const publicUrl = await page.inputValue("#share-url");
-    assert.equal(new URL(publicUrl).searchParams.get("snapshot"), "source-1a-v1");
+    assert.equal(new URL(publicUrl).searchParams.get("snapshot"), "source-1a-v2");
     assert.ok(!publicUrl.includes("Test") && !publicUrl.includes("325000"));
     assert.match(await text(page, "#share-copy"), /private database records/);
     await page.locator('[data-action="close-share"]').click();
@@ -456,7 +460,7 @@ async function privateWorkspace() {
     const response = await fetch(`${service.origin}api/state`).then(response => response.json());
     assert.equal(response.revision, revision);
     assert.equal(response.data.workloads[0].snapshots.at(-1).metrics.logicalOps, "1290");
-    assert.ok(response.data.workloads[0].snapshots.some(record => record.id === "source-1a-v1"));
+    assert.ok(response.data.workloads[0].snapshots.some(record => record.id === "source-1a-v2"));
     assert.ok(localUrl.includes("saved-"));
   } finally {
     await context.close();
@@ -468,7 +472,7 @@ async function privateWorkspace() {
 (async () => {
   browser = await chromium.launch(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH, headless: true } : { channel: "msedge", headless: true });
   try {
-    await check("all supplied names/counts, source assumptions, undated baseline and read-only public boundary", suppliedData);
+    await check("all supplied names/counts, confirmed source date, assumptions and read-only public boundary", suppliedData);
     await check("candidate/system links, published sharing, invalid-state recovery and browser history", links);
     await check("two exact scatter plots and distinguishable all-candidate global metric chart", plotMapping);
     if (!process.env.DASHBOARD_URL) await check("zero/huge/missing counts and honest dated versus undated history", numericalFixtures);

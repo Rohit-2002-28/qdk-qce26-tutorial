@@ -10,16 +10,16 @@ publishing the image files or local filesystem paths.
 
 ## Source data and assumptions
 
-| ID | Application | Logical ops | Physical ops (w/o move) | Logical qubits | Physical qubits |
-|---|---|---:|---:|---:|---:|
-| 1a | Spin Dynamics Floquet-3x3 | 638 | 324,305 | 9 | 220 |
-| 1b | Spin Dynamics Floquet-4x3 | 834 | 338,559 | 12 | 240 |
-| 2 | Lasers (Dicke superradiance) | 395 | 109,357 | 4 | 100 |
-| 3a | IQPE extended Hubbard Ethylene | 405 | 167,655 | 5 | 100 |
-| 3b | IQPE extended Hubbard Cyclobutadiene | 1,054 | 492,166 | 9 | 220 |
-| 4a | IQPE H2 | 580 | 185,312 | 5 | 140 |
-| 4b | IQPE LiH | 626 | 191,352 | 5 | 140 |
-| 4c | IQPE N2 | 6,232 | 1,698,744 | 9 | 220 |
+| Application | Logical ops | Physical ops (w/o move) | Logical qubits | Physical qubits |
+|---|---:|---:|---:|---:|
+| Spin Dynamics Floquet-3x3 | 638 | 324,305 | 9 | 220 |
+| Spin Dynamics Floquet-4x3 | 834 | 338,559 | 12 | 240 |
+| Lasers (Dicke superradiance) | 395 | 109,357 | 4 | 100 |
+| IQPE extended Hubbard Ethylene | 405 | 167,655 | 5 | 100 |
+| IQPE extended Hubbard Cyclobutadiene | 1,054 | 492,166 | 9 | 220 |
+| IQPE H2 | 580 | 185,312 | 5 | 140 |
+| IQPE LiH | 626 | 191,352 | 5 | 140 |
+| IQPE N2 | 6,232 | 1,698,744 | 9 | 220 |
 
 All seven source metrics, including the three gate categories, remain in All
 metrics and the raw seed. Systems are Magnet Models, Laser Models (Dicke), Model
@@ -40,26 +40,30 @@ full transport-inclusive operation total. The producing report's precise
 counter/filter was not supplied, so its exact exclusion cannot be independently
 verified from these screenshots. Counts alone do not establish execution time.
 
-No estimate dates, past snapshots, runtime models, targets, owners, maturity
-assessments, outlook commitments or hardware/correctness results were supplied.
-Those values are not fabricated. **23 September 2026 is the receipt date, not
-the estimate date.** Undated baseline records do not become points on an invented
-time axis. New engineering estimates require their actual as-of date.
+The user confirmed **4 September 2026** as the estimate date for all eight
+supplied records (original notation `09-04-2026`, explicitly clarified as
+September 4). **23 September 2026 is only the receipt date.** No earlier snapshots,
+runtime models, targets, owners, maturity assessments, outlook commitments or
+hardware/correctness results were supplied; those values are not fabricated.
+New engineering estimates require their actual as-of date.
 
 ## Reading the dashboard
 
 - Overview places **Application candidate before System**. The grouped
   selectors preserve the four system families and eight real applications.
+  Visible labels use application and model-family names only, not numbered
+  application/system codes. Stable internal IDs remain in links and raw audit
+  records so label changes do not change record identity.
 - The **Overview** selector switches between the selected application and
   **Global overview - all applications**. Global overview uses one chart with
   a Logical operations / Logical qubits metric selector, avoiding a mixed-scale
   dual axis. Eight distinct colors, marker shapes, dash patterns and a labeled
   key identify candidates. Checkboxes isolate series; keyboard/click Details
   and an exact-data table also distinguish coincident points.
-- The initial global chart is explicitly an **undated baseline**, not a trend.
-  As dated records are saved privately, lines connect compatible dated records
-  only. Missing values, undated source records and changed configurations are
-  never silently interpolated.
+- The initial global chart shows one **4 September 2026** point per application,
+  not a fabricated historical trend. As records are saved privately, lines
+  connect compatible dated records only. Missing values, undated imports and
+  changed configurations are never silently interpolated.
 - **Application Roadmap and Progress** follows the supplied five-stage diagram:
   specification, qubit fit, logical operations, correctness, and hardware
   demonstration. Initial statuses describe the evidence supplied, not invented
@@ -108,6 +112,9 @@ Open **http://127.0.0.1:8765/**, then choose Engineering.
   before retrying: an unconfirmed network response is not proof of rollback.
 - The seed is loaded once into a new database. Restarting does not replace
   saved work with the source file, and "Reload saved data" never deletes history.
+  The original pre-clarification import is retained in the existing private
+  database. The user's date confirmation is recorded as an append-only source
+  event with new dated snapshots; it does not rewrite the original raw import.
 
 This is a **single-computer private workspace**, not an Internet-facing shared
 team service. Loopback/Origin/token checks protect the browser boundary; they
