@@ -100,10 +100,56 @@ main { max-width: 1536px; margin: auto; padding: 28px 36px 36px; min-height: cal
 }
 .sheet, .overview-surface { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); min-width: 0; }
 .overview-page { max-width: 1200px; margin: auto; }
-.overview-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+.overview-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
 .overview-heading h1 { margin: 0; }
 .overview-selection { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-.candidate-controls { display: grid; grid-template-columns: minmax(110px, 150px) minmax(135px, 200px); gap: 14px; min-width: 0; }
+.candidate-controls { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; min-width: 0; width: 100%; }
+.candidate-controls select { min-width: 0; width: 100%; }
+.overview-mode { margin-left: auto; min-width: 240px; font-size: 13px; }
+.overview-selection { display: block; margin-bottom: 12px; }
+.estimate-meta { margin-bottom: 16px; }
+.global-heading { display: flex; justify-content: space-between; align-items: start; gap: 24px; padding: 20px 24px 10px; }
+.global-heading h2 { font-size: 19px; margin-bottom: 4px; }
+.global-heading p { font-size: 13px; color: var(--muted); margin: 0; }
+.global-heading .field { min-width: 180px; }
+.global-chart-body { padding: 0 24px 20px; }
+.global-chart { margin: 0; }
+.global-chart [data-global-id] { cursor: pointer; }
+.global-chart [data-global-id]:focus { outline: none; }
+.global-chart [data-global-id]:focus-visible .point-hit, .global-chart [aria-pressed="true"] .point-hit { stroke: var(--ink); stroke-width: 1.5; }
+.series-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; margin-top: 14px; }
+.series-legend > div { display: flex; align-items: start; gap: 8px; min-width: 0; }
+.series-legend label { display: flex; align-items: start; gap: 7px; min-width: 0; flex: 1; cursor: pointer; font-size: 13px; line-height: 1.55; }
+.series-legend label input { flex-shrink: 0; margin-top: 3px; }
+.series-legend label span { overflow-wrap: anywhere; }
+.series-legend label svg { flex-shrink: 0; }
+.series-legend .text-button { padding: 0; font-size: 13px; }
+.global-point-detail { border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 10px; font-size: 13px; min-height: 110px; }
+.global-point-detail p { margin: 4px 0; overflow-wrap: anywhere; }
+.global-data { margin-top: 14px; font-size: 13px; }
+.global-data summary { cursor: pointer; color: var(--blue); padding-block: 8px; }
+.global-data th:first-child { min-width: 210px; white-space: normal; }
+.roadmap-panel { margin-top: 24px; }
+.roadmap-panel h2 { font-size: 19px; margin-bottom: 14px; }
+.roadmap-stages { padding: 0; margin: 0; list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.roadmap-stages summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 4px 8px; line-height: 1.5; }
+.roadmap-stages summary::-webkit-details-marker { display: none; }
+.stage-number { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--rule-strong); border-radius: 50%; font-size: 12px; color: var(--muted); }
+.stage-title { font-size: 13px; font-weight: 600; min-height: 40px; }
+.stage-status { grid-column: 2; font-size: 12px; color: var(--blue-deep); text-decoration: underline; text-underline-offset: 3px; }
+.stage-status.blocked { color: var(--amber); }
+.roadmap-stages p { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.roadmap-caveat { font-size: 13px; color: var(--muted); margin: 14px 0 0; max-width: 95ch; }
+.raw-records { padding: 0 24px; }
+.raw-records details { border-top: 1px solid var(--rule); padding-block: 12px; }
+.raw-records summary { cursor: pointer; font-size: 13px; }
+.raw-records pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--canvas); font-size: 12px; }
+.source-records { padding: 0 24px; list-style: none; }
+.source-records li { padding-block: 12px; border-top: 1px solid var(--rule); font-size: 13px; }
+.source-records p { margin: 5px 0; }
+.source-records code { overflow-wrap: anywhere; }
+#roadmap-form > .field { margin-bottom: 20px; }
+#roadmap-form .editor-errors { margin-inline: 0; }
 .candidate-controls .field { font-size: 13px; }
 .estimate-meta { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
 .estimate-meta strong { font-weight: 600; color: var(--ink); }
@@ -116,7 +162,7 @@ main { max-width: 1536px; margin: auto; padding: 28px 36px 36px; min-height: cal
 .count-label { font-size: 12px; color: var(--muted); }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-weight: 600; }
-.workload-button { padding: 2px 0; background: transparent; border: 0; color: var(--ink); font-weight: 600; text-align: left; }
+.workload-button { padding: 2px 0; background: transparent; border: 0; color: var(--ink); font-weight: 600; text-align: left; max-width: 225px; white-space: normal; line-height: 1.45; }
 .workload-date { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 400; }
 .trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 24px 24px 0; gap: 40px; }
 .trend { min-width: 0; }
@@ -212,9 +258,7 @@ th { text-align: left; font-weight: 600; }
 .update-foot { padding: 16px 24px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 12px; }
 .milestones { list-style: none; padding: 0 24px; margin: 0; }
 .milestones li { border-top: 1px solid var(--rule); display: grid; grid-template-columns: 66px 1fr; gap: 16px; padding: 22px 0; }
-.milestone-date { font-variant-numeric: tabular-nums; color: var(--blue-deep); }
-.milestone-date strong { display: block; font-size: 22px; line-height: 1.2; font-weight: 600; }
-.milestone-date span { display: block; font-size: 12px; margin-top: 4px; color: var(--muted); }
+.milestone-window { color: var(--blue-deep); font-size: 14px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
 .milestones h3 { margin-bottom: 6px; font-size: 14px; }
 .milestones p { margin-bottom: 9px; color: var(--muted); font-size: 12px; }
 .milestone-status { display: inline-block; border: 1px solid var(--rule); border-radius: 4px; padding: 3px 6px; font-size: 12px; color: var(--muted); }
@@ -246,7 +290,8 @@ th { text-align: left; font-weight: 600; }
 .edit-table .checked-row .frozen { background: #f2f7fc; }
 .edit-table .changed-cell { background: #e8f1fb !important; border-color: #b5cce2 !important; }
 .edit-table [aria-invalid="true"], .field [aria-invalid="true"] { border-color: var(--error) !important; background: var(--error-soft) !important; }
-.row-select { display: inline-flex; gap: 10px; align-items: center; white-space: nowrap; cursor: pointer; }
+.row-select { display: inline-flex; gap: 10px; align-items: center; white-space: normal; cursor: pointer; max-width: 240px; line-height: 1.45; }
+.row-select input { flex-shrink: 0; }
 .editor-errors { margin: 0 24px 18px; padding: 12px 14px; border: 1px solid #edc2c9; border-radius: 5px; background: var(--error-soft); color: var(--error); font-size: 12px; line-height: 1.6; }
 .editor-errors ul { padding-left: 18px; margin-bottom: 0; }
 .paste-help { margin: 0 24px 16px; padding: 12px 14px; background: #f2f6fa; border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
@@ -303,9 +348,6 @@ dialog p { color: var(--muted); font-size: 13px; }
 .update-list h3::before { display: none; }
 .update-list p { margin-left: 0; }
 .milestones li { grid-template-columns: 90px 1fr; }
-.milestone-date strong { font-size: 17px; }
-.milestone-date span { font-size: 13px; }
-.milestone-date a { text-decoration: none; }
 .history-note { padding: 14px 24px; color: var(--muted); font-size: 13px; }
 .history-note p { margin-bottom: 0; }
 .revision-list { margin-top: 12px; padding: 0; list-style: none; }
@@ -330,7 +372,7 @@ dialog p { color: var(--muted); font-size: 13px; }
 .scatter [role="button"]:focus-visible .marker-point { stroke: #072b50; stroke-width: 3; }
 .scatter [aria-pressed="true"] .marker-point { stroke: #072b50; stroke-width: 2; }
 .point-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px; }
-.point-picker button { border: 1px solid var(--rule-strong); background: white; border-radius: 4px; min-height: 34px; padding: 5px 9px; font-size: 13px; color: var(--ink); }
+.point-picker button { border: 1px solid var(--rule-strong); background: white; border-radius: 4px; min-height: 34px; padding: 5px 9px; font-size: 13px; color: var(--ink); max-width: 100%; white-space: normal; text-align: left; }
 .point-picker button:hover { background: var(--blue-light); }
 .point-picker button[aria-pressed="true"] { border-color: var(--blue); background: var(--blue-soft); font-weight: 600; }
 .point-detail { border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; min-height: 138px; }
@@ -365,7 +407,6 @@ dialog p { color: var(--muted); font-size: 13px; }
 .written-history { margin-top: 20px; }
 .written-history summary { cursor: pointer; padding: 16px 24px; font-weight: 600; color: var(--blue); }
 .written-history .revision-list { margin: 0; padding: 0 24px 12px; }
-#milestone-dates { border: 0; padding: 0; margin: 0; display: contents; }
 #linked-target-preview { color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 8px; }
 #share-status { font-size: 13px; margin-top: 14px; }
 .unavailable-view { max-width: 750px; padding: 24px; }
@@ -378,6 +419,10 @@ dialog p { color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) {
   .writing-layout { grid-template-columns: 1fr; }
   .overview-selection { align-items: start; flex-direction: column; gap: 12px; }
+  .roadmap-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .series-legend { grid-template-columns: minmax(0, 1fr); }
+  .history-head { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+  .history-head select { max-width: 100%; min-width: 0; }
 }
 @media (max-width: 1150px) {
   .preview-bar-inner, .header-inner, .nav-inner { padding-inline: 24px; }
@@ -414,7 +459,7 @@ dialog p { color: var(--muted); font-size: 13px; }
   .overview-heading { gap: 10px; margin-bottom: 16px; }
   .overview-heading h1 { font-size: 22px; }
   .overview-selection { margin-bottom: 18px; }
-  .candidate-controls { grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr); width: 100%; gap: 12px; }
+  .candidate-controls { grid-template-columns: minmax(0, 1fr); width: 100%; gap: 10px; }
   .candidate-controls select { min-width: 0; }
   .trend-grid { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 0; gap: 24px; }
   .metric-value { font-size: 32px; }
@@ -423,6 +468,16 @@ dialog p { color: var(--muted); font-size: 13px; }
   .resource-details > summary { padding-inline: 16px; }
   .resource-details-body { padding-inline: 16px; }
   .resource-detail-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .overview-mode { margin-left: 0; width: 100%; min-width: 0; }
+  .overview-heading .snapshot-picker { margin-left: auto; }
+  .global-heading { padding: 18px 16px 10px; flex-direction: column; gap: 12px; }
+  .global-heading .field { width: 100%; }
+  .global-chart-body { padding-inline: 16px; }
+  .roadmap-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .roadmap-stages summary { grid-template-columns: 22px minmax(0, 1fr); gap: 4px 6px; }
+  .stage-title { min-height: 0; }
+  .global-point-detail { min-height: 0; }
+  .raw-records, .source-records { padding-inline: 16px; }
   .sheet-heading { padding: 17px 16px; align-items: start; flex-wrap: wrap; gap: 14px; }
   .sheet-heading h2 { font-size: 16px; }
   .table-tools { gap: 14px; font-size: 12px; }
@@ -475,8 +530,6 @@ dialog p { color: var(--muted); font-size: 13px; }
   .page-heading p { font-size: 13px; }
   .table-tools, .editor-toolbar p, .app-footer { font-size: 13px; }
   .milestones li { grid-template-columns: 1fr; gap: 8px; }
-  .milestone-date strong, .milestone-date span { display: inline; font-size: 13px; }
-  .milestone-date span { margin-left: 8px; }
   .scatter-body { padding-inline: 12px; }
   .scatter-sheet .sheet-heading { padding-inline: 12px; }
   .point-detail { min-height: 0; }

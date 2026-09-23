@@ -1,635 +1,484 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const os = require("node:os");
+const net = require("node:net");
+const { spawn } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 
-const base = process.env.DEMO_URL || pathToFileURL(path.resolve(__dirname, "..", "index.html")).href;
+const directory = path.resolve(__dirname, "..");
+const base = process.env.DASHBOARD_URL || pathToFileURL(path.join(directory, "index.html")).href;
 const artifacts = process.env.REVIEW_ARTIFACTS;
-const results = [];
-const pageErrors = [];
-const overviewLayouts = [];
+const results = [], errors = [], layouts = [];
+const expected = {
+  "1a": ["638", "324305", "132", "254", "252", "9", "220"],
+  "1b": ["834", "338559", "172", "332", "330", "12", "240"],
+  "2": ["395", "109357", "60", "171", "164", "4", "100"],
+  "3a": ["405", "167655", "109", "108", "188", "5", "100"],
+  "3b": ["1054", "492166", "278", "185", "591", "9", "220"],
+  "4a": ["580", "185312", "113", "207", "260", "5", "140"],
+  "4b": ["626", "191352", "107", "255", "264", "5", "140"],
+  "4c": ["6232", "1698744", "742", "2631", "2859", "9", "220"]
+};
+const expectedIds = ["1a", "1b", "2", "3a", "3b", "4a", "4b", "4c"];
 let browser;
-
-const route = (name, params = {}) => {
-  const url = new URL(base);
+const urlFor = (route, params = {}, origin = base) => {
+  const url = new URL(origin);
   url.search = new URLSearchParams(params).toString();
-  url.hash = name;
+  url.hash = route;
   return url.href;
 };
-const text = async (page, selector) => (await page.locator(selector).innerText()).trim().replace(/\s+/g, " ");
-const nav = (page, name) => page.locator(`.main-nav [data-route="${name}"]`).click();
+const text = async (page, selector) => (await page.locator(selector).innerText()).replace(/\s+/g, " ").trim();
+const nav = (page, route) => page.locator(`.main-nav [data-route="${route}"]`).click();
 const mode = (page, name) => page.locator(`[data-mode="${name}"]`).click();
-const count = (page, key, value, id = "App 1a") => page.locator(`[data-workload-id="${id}"][data-field="${key}"]`).fill(value);
-const written = (page, key) => page.locator(`[data-written="${key}"]`);
+const field = (page, key) => page.locator(`[data-written="${key}"]`);
 const contextField = (page, key) => page.locator(`[data-context="${key}"]`);
-const openResourceDetails = async page => {
-  if (!await page.locator("#resource-details").evaluate(element => element.open)) {
-    await page.locator("#resource-details > summary").click();
-  }
-};
-const selectSnapshot = async (page, id) => {
-  if (!await page.locator(".snapshot-picker").evaluate(element => element.open)) {
-    await page.locator(".snapshot-picker > summary").click();
-  }
+const countField = (page, key, id = "1a") => page.locator(`[data-workload-id="${id}"][data-field="${key}"]`);
+const snapshot = async (page, id) => {
+  await page.locator(".snapshot-picker > summary").click();
   await page.selectOption("#snapshot-select", id);
 };
+const details = page => page.locator("#resource-details > summary").click();
 
-async function overviewMeasurements(page) {
-  return page.evaluate(() => {
-    const bounds = selector => [...document.querySelectorAll(selector)].map(element => {
-      const box = element.getBoundingClientRect();
-      return { label: element.getAttribute("aria-label") || element.dataset.metric || element.id || "", top: Math.round(box.top), bottom: Math.round(box.bottom), height: Math.round(box.height) };
-    });
-    const walker = document.createTreeWalker(document.querySelector("main"), NodeFilter.SHOW_TEXT);
-    const words = [];
-    let node;
-    while ((node = walker.nextNode())) {
-      const element = node.parentElement;
-      if (!node.textContent.trim() || element.closest('script,style,option,.sr-only,[aria-hidden="true"]')) continue;
-      const closed = element.closest("details:not([open])");
-      if (closed && element.closest("summary") !== closed.querySelector(":scope > summary")) continue;
-      if (getComputedStyle(element).visibility === "hidden") continue;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const box = range.getBoundingClientRect();
-      if (box.width > 0 && box.height > 0) words.push(node.textContent.trim());
-    }
-    return {
-      width: innerWidth, viewportHeight: innerHeight, pageHeight: document.documentElement.scrollHeight,
-      scrollWidth: document.documentElement.scrollWidth, defaultMainWords: words.join(" ").split(/\s+/).length,
-      defaultMainText: words.join(" "), headlines: bounds("[data-metric]"), charts: bounds(".chart"),
-      selection: bounds("#system-filter,#candidate-select,.estimate-meta,.snapshot-picker > summary")
-    };
-  });
-}
-
-async function createPage(url = route("overview"), options = {}) {
+async function open(url = urlFor("overview"), options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
   const page = await context.newPage();
-  page.on("pageerror", error => pageErrors.push(error.stack));
+  page.on("pageerror", error => errors.push(error.stack));
   await page.goto(url);
   await page.locator("h1").waitFor();
-  return { page, context };
+  return { context, page };
 }
 
-async function check(name, fn) {
-  await fn();
+async function check(name, action) {
+  await action();
   results.push(name);
   console.log(`PASS ${name}`);
 }
 
-async function assertPlots(page) {
-  const data = await page.evaluate(() => {
-    const expected = window.RESOURCE_DEMO.workloads.map(item => {
-      const latest = [...item.snapshots].sort((a, b) => a.asOf.localeCompare(b.asOf) || a.revision - b.revision).at(-1);
-      return { id: item.id, metrics: latest.metrics };
-    });
-    const plots = [...document.querySelectorAll("[data-scatter]")].map(svg => ({
-      kind: svg.dataset.scatter, width: svg.viewBox.baseVal.width, height: svg.viewBox.baseVal.height,
-      ...Object.fromEntries(["xMax", "yMax", "left", "right", "top", "bottom"].map(key => [key, svg.dataset[key]])),
-      points: [...svg.querySelectorAll("[data-point]")].map(point => ({
-        id: point.dataset.point, x: point.dataset.x, y: point.dataset.y,
-        cx: Number(point.dataset.cx), cy: Number(point.dataset.cy)
-      }))
-    }));
-    return { expected, plots };
-  });
-  assert.equal(data.plots.length, 2);
-  for (const plot of data.plots) {
-    assert.equal(plot.points.length, 8);
-    for (const point of plot.points) {
-      const sample = data.expected.find(row => row.id === point.id);
-      const xKey = plot.kind === "qubits" ? "logicalQubits" : "logicalOps";
-      const yKey = plot.kind === "qubits" ? "physicalQubits" : "physicalOps";
-      assert.equal(point.x, sample.metrics[xKey]);
-      assert.equal(point.y, sample.metrics[yKey]);
-      const x = Number(plot.left) + Number(BigInt(point.x) * 1000000n / BigInt(plot.xMax)) / 1000000 * (plot.width - Number(plot.left) - Number(plot.right));
-      const y = Number(plot.top) + (1 - Number(BigInt(point.y) * 1000000n / BigInt(plot.yMax)) / 1000000) * (plot.height - Number(plot.top) - Number(plot.bottom));
-      assert.ok(Math.abs(point.cx - x) < 0.00001, `${point.id}: x mapping`);
-      assert.ok(Math.abs(point.cy - y) < 0.00001, `${point.id}: y mapping`);
+async function suppliedData() {
+  const { context, page } = await open();
+  try {
+    const data = await page.evaluate(() => window.RESOURCE_DATA);
+    assert.deepEqual(data.workloads.map(item => item.id), expectedIds);
+    assert.deepEqual(data.systems.map(system => system.name), [
+      "Magnet Models", "Laser Models (Dicke)",
+      "Model Hamiltonian Energy Estimation (Hubbard Model)", "Small Chemistry Problems"
+    ]);
+    for (const item of data.workloads) {
+      assert.equal(item.snapshots.length, 1, "No fabricated historical samples.");
+      const record = item.snapshots[0];
+      assert.equal(record.asOf, null);
+      assert.equal(record.savedAt, null);
+      assert.equal(record.owner, "");
+      assert.equal(record.context.runtimeHours, "");
+      assert.equal(record.context.targetPhysicalQubits, "");
+      assert.deepEqual(data.fields.map(field => record.metrics[field.key]), expected[item.id]);
+      assert.equal(BigInt(record.metrics.nonClifford) + BigInt(record.metrics.clifford1) + BigInt(record.metrics.clifford2), BigInt(record.metrics.logicalOps));
     }
-  }
+    assert.equal(data.updates.length, 0);
+    assert.equal(data.milestones.length, 0);
+    assert.equal(await page.locator("body").getAttribute("data-storage"), "read-only");
+    assert.deepEqual(await page.locator("[data-metric]").allTextContents(), ["638", "9"]);
+    assert.ok(!/Dummy|fictional|120M|App 1a/.test(await text(page, "body")));
+    const order = await page.locator(".candidate-controls select").evaluateAll(selects => selects.map(select => select.id));
+    assert.deepEqual(order, ["candidate-select", "system-filter"]);
+    assert.equal(await page.locator("#candidate-select option").count(), 8);
+    assert.match(await text(page, ".estimate-meta"), /Spin Dynamics Floquet-3x3.*Estimate date not supplied/);
+    assert.match(await text(page, ".chart-caption"), /No historical change is inferred/);
+    assert.equal(await page.locator(".chart .chart-point").count(), 2);
+    assert.equal(await page.locator(".roadmap-stages > li").count(), 5);
+    assert.match(await text(page, ".roadmap-panel"), /Application Roadmap and Progress/);
+    assert.equal(await page.locator(".stage-status").getByText("Complete", { exact: true }).count(), 0);
+    await details(page);
+    assert.match(await text(page, "#resource-details"), /324,305/);
+    assert.match(await text(page, "#resource-details"), /nearest pi\/2 multiple/);
+    assert.match(await text(page, "#resource-details"), /PHYSICAL_MOVE.*separately from the SWAP/);
+    assert.match(await text(page, "#resource-details"), /exact exclusion filter were not supplied/);
+    await nav(page, "metrics");
+    const rows = await page.locator("#all-metrics-table tbody tr").evaluateAll(rows => rows.map(row => [...row.querySelectorAll("td")].map(cell => cell.textContent.replaceAll(",", "").trim())));
+    assert.deepEqual(rows, expectedIds.map(id => expected[id]));
+    await nav(page, "updates");
+    assert.equal(await page.locator("[data-update-id],[data-milestone-id]").count(), 0);
+    assert.match(await text(page, "main"), /sprint-based plans/);
+    await mode(page, "engineering");
+    assert.ok(await page.locator("#save-updates").isDisabled());
+    assert.ok(await countField(page, "logicalOps").isDisabled());
+    await nav(page, "records");
+    assert.equal(await page.locator('a[href="/api/database"]').count(), 0);
+    assert.match(await text(page, "main"), /does not expose the raw-input database/);
+  } finally { await context.close(); }
 }
 
-async function routing() {
-  const { page, context } = await createPage();
+async function links() {
+  const { context, page } = await open();
   try {
-    assert.equal(await text(page, "[data-metric='logicalOps']"), "120M");
-    assert.equal(await text(page, "[data-metric='logicalQubits']"), "240");
-    assert.match(await text(page, ".chart-caption"), /Changes compare the same configuration.*Gray: other assumptions/);
-    assert.equal(await page.locator(".chart-caption").count(), 1, "One shared chart explanation.");
-    assert.equal(await page.locator(".main-nav [data-route='edit']").count(), 0);
-    assert.equal(await page.locator(".ledger,.briefing,.decision-context,.primary-metrics,.overview-links").count(), 0);
-    assert.equal(await page.locator(".overview-notice").count(), 0, "Do not alarm on a currently valid same-version comparison.");
-    assert.equal(await page.locator("#candidate-select option").count(), 8);
-    assert.equal(await page.locator("#candidate-select optgroup").count(), 4);
-    assert.ok(!await page.locator(".goal-line").isVisible(), "Secondary resource context is closed by default.");
-    for (const trend of await page.locator(".trend").all()) {
-      assert.equal(await trend.locator("[data-metric]").count(), 1);
-      assert.equal(await trend.locator(".metric-label").count(), 1);
-      assert.equal(await trend.locator(".delta").count(), 1);
-      assert.equal(await trend.locator(".chart").count(), 1, "Each headline stays with its change and chart.");
-    }
-    await openResourceDetails(page);
-    assert.match(await text(page, ".goal-line"), /360K physical qubits.*340K target.*20K above target; 5.9%/);
-    assert.deepEqual(await page.locator(".overhead strong").allTextContents(), ["1,200 : 1", "1,500 : 1"]);
-    assert.match(await text(page, "#resource-details"), /6.2 hours.*engineer|6.2 hours.*Engineer-supplied/s);
-    assert.match(await text(page, "#resource-details"), /25%.*1-qubit Clifford 58.3%.*2-qubit Clifford 16.7%/);
-    assert.match(await text(page, "#resource-details"), /Saved at \(not the estimate date\).*DEMO|DEMO.*Saved at \(not the estimate date\)/s);
-    assert.equal(await page.locator("#resource-details tbody td").count(), 7);
-    await page.locator("#resource-details > summary").click();
-    const arrow = await page.locator("#system-filter").evaluate(element => {
-      const css = getComputedStyle(element);
-      return { padding: css.paddingRight, size: css.backgroundSize, position: css.backgroundPosition };
-    });
-    assert.deepEqual(arrow, { padding: "36px", size: "14px 14px", position: "calc(100% - 12px) 50%" });
-    await page.selectOption("#system-filter", "2");
-    assert.equal(await page.locator("#candidate-select option").count(), 3);
-    await page.selectOption("#candidate-select", "App 2c");
-    await selectSnapshot(page, "App 2c-2026-09-15-0");
-    assert.match(await text(page, ".estimate-meta"), /Historical snapshot.*Provisional.*demo-v1.*revision 1/);
-    const selectedUrl = page.url();
-    const query = new URL(selectedUrl).searchParams;
-    assert.equal(query.get("candidate"), "App 2c");
-    assert.equal(query.get("system"), "2");
-    assert.equal(query.get("snapshot"), "App 2c-2026-09-15-0");
-    assert.equal(query.get("config"), "demo-v1");
-    const fresh = await createPage(selectedUrl);
-    assert.equal(await fresh.page.inputValue("#candidate-select"), "App 2c");
-    assert.equal(await fresh.page.inputValue("#system-filter"), "2");
-    assert.equal(await fresh.page.inputValue("#snapshot-select"), "App 2c-2026-09-15-0");
-    assert.equal(await text(fresh.page, "[data-metric='logicalOps']"), "147M");
-    await fresh.page.reload();
-    assert.equal(await fresh.page.inputValue("#snapshot-select"), "App 2c-2026-09-15-0");
+    await page.selectOption("#system-filter", "3");
+    assert.equal(await page.locator("#candidate-select option").count(), 2);
+    await page.selectOption("#candidate-select", "3b");
+    const selected = page.url();
+    const fresh = await open(selected);
+    assert.equal(await fresh.page.inputValue("#candidate-select"), "3b");
+    assert.equal(await fresh.page.inputValue("#system-filter"), "3");
+    assert.deepEqual(await fresh.page.locator("[data-metric]").allTextContents(), ["1.1K", "9"]);
     await fresh.context.close();
     await nav(page, "compare");
-    assert.equal(new URL(page.url()).searchParams.get("snapshot"), query.get("snapshot"));
     await page.goBack();
-    assert.equal(page.url(), selectedUrl);
+    assert.equal(page.url(), selected);
     await page.goBack();
-    assert.equal(await page.inputValue("#snapshot-select"), "App 2c-2026-09-22-0");
+    assert.equal(await page.inputValue("#candidate-select"), "3a");
     await page.goForward();
-    assert.equal(await page.inputValue("#snapshot-select"), "App 2c-2026-09-15-0");
-    await page.locator(".snapshot-picker > summary").focus();
-    await page.keyboard.press("Enter");
-    assert.ok(await page.locator("#snapshot-select").isVisible());
+    assert.equal(page.url(), selected);
+    await page.locator(".snapshot-picker > summary").click();
     await page.keyboard.press("Escape");
     assert.ok(!await page.locator("#snapshot-select").isVisible());
-    assert.ok(await page.locator(".snapshot-picker > summary").evaluate(element => element === document.activeElement));
-    await page.locator("#share-action").click();
-    assert.equal(await page.inputValue("#share-url"), selectedUrl);
-    await page.locator("[data-action='close-share']").click();
-    const modifierResult = await page.locator(".main-nav [data-route='compare']").evaluate(link => {
-      const event = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
-      link.dispatchEvent(event);
-      return event.defaultPrevented;
+    const prevented = await page.locator('.main-nav [data-route="compare"]').evaluate(link => {
+      const click = new MouseEvent("click", { ctrlKey: true, bubbles: true, cancelable: true });
+      link.dispatchEvent(click);
+      return click.defaultPrevented;
     });
-    assert.equal(modifierResult, false, "Modifier-click must retain native behavior.");
-    const targetHref = await page.locator(".main-nav [data-route='compare']").getAttribute("href");
-    assert.equal(new URL(targetHref).searchParams.get("candidate"), "App 2c");
-    for (const [url, expected] of [
-      [route("unknown"), /tab "unknown"/],
-      [route("overview", { candidate: "Unknown" }), /candidate "Unknown"/],
-      [route("overview", { candidate: "App 2c", system: "1" }), /does not belong/],
-      [route("overview", { candidate: "App 2c", snapshot: "missing-snapshot" }), /snapshot.*unavailable/],
-      [route("overview", { snapshot: "" }), /empty view parameter/],
-      [route("overview", { config: "not-this-version" }), /not the requested configuration/]
-    ]) {
-      const invalid = await createPage(url);
-      assert.match(await text(invalid.page, ".unavailable-view"), expected);
-      assert.equal(await invalid.page.locator("[data-metric]").count(), 0);
-      await invalid.page.locator(".unavailable-view a").click();
-      assert.equal(await text(invalid.page, "h1"), "Resource overview");
-      await invalid.context.close();
-    }
-    for (const name of ["edit", "guide"]) {
-      const legacy = await createPage(route(name));
-      assert.equal(await legacy.page.locator("[data-mode='engineering']").getAttribute("aria-current"), "page");
-      await legacy.context.close();
-    }
-    await page.goto(route("overview"));
-    await page.selectOption("#candidate-select", "App 3b");
-    assert.equal(await page.locator(".overview-notice").count(), 1);
-    assert.match(await text(page, ".overview-notice"), /Update overdue: 14 days old against a 7-day cadence/);
-    await page.selectOption("#candidate-select", "App 4");
-    assert.equal(await page.locator(".overview-notice").count(), 1);
-    assert.match(await text(page, ".overview-notice"), /No comparable earlier estimate on demo-v1/);
-    assert.ok((await page.locator(".delta").allTextContents()).every(value => !value.includes("%")));
-    await page.selectOption("#candidate-select", "App 1a");
-    assert.equal(await page.locator(".overview-notice").count(), 0);
-    await page.emulateMedia({ forcedColors: "active" });
-    for (const selector of ["#system-filter", "#candidate-select"]) {
-      const native = await page.locator(selector).evaluate(element => {
-        const css = getComputedStyle(element);
-        return { appearance: css.appearance, image: css.backgroundImage };
-      });
-      assert.deepEqual(native, { appearance: "auto", image: "none" });
+    assert.equal(prevented, false);
+    await page.locator("#share-action").click();
+    const shared = new URL(await page.inputValue("#share-url"));
+    assert.equal(shared.hostname, "rohit-2002-28.github.io");
+    assert.equal(shared.searchParams.get("candidate"), "3b");
+    assert.equal(shared.searchParams.get("snapshot"), "source-3b-v1");
+    await page.locator('[data-action="close-share"]').click();
+    for (const params of [{ candidate: "App 2c" }, { snapshot: "does-not-exist" }, { candidate: "3b", system: "1" }, { snapshot: "" }, { overview: "unknown" }]) {
+      await page.goto(urlFor("overview", params));
+      assert.equal(await page.locator("[data-metric]").count(), 0);
+      assert.ok(await page.locator(".unavailable-view").isVisible());
+      await page.locator(".unavailable-view a").click();
+      assert.equal(await text(page, "h1"), "Resource overview");
     }
   } finally { await context.close(); }
 }
 
-async function plots() {
-  const { page, context } = await createPage(route("compare"));
+async function plotMapping() {
+  const { context, page } = await open(urlFor("compare"));
   try {
-    await assertPlots(page);
-    const point = page.locator("svg[data-scatter='qubits'] [data-point='App 2c']");
-    await point.focus();
-    assert.match(await text(page, "#point-detail-qubits"), /App 2c/);
-    await point.press("Enter");
-    assert.equal(new URL(page.url()).searchParams.get("candidate"), "App 2c");
-    const fresh = await createPage(page.url());
-    assert.match(await text(fresh.page, "#point-detail-qubits"), /App 2c/);
-    await fresh.context.close();
-    await page.locator(".point-picker [data-plot='operations'][data-point='App 1a']").click();
-    assert.equal(await text(page, "#point-detail-operations [data-exact-x]"), "120,000,000");
-    assert.equal(await text(page, "#point-detail-operations [data-exact-y]"), "144,000,000,000");
+    for (const kind of ["qubits", "operations"]) {
+      const points = await page.locator(`[data-scatter="${kind}"] [data-point]`).evaluateAll(points => points.map(point => ({
+        id: point.dataset.point, x: point.dataset.x, y: point.dataset.y, cx: Number(point.dataset.cx), cy: Number(point.dataset.cy)
+      })));
+      const axes = await page.locator(`[data-scatter="${kind}"]`).evaluate(svg => ({ ...svg.dataset, width: svg.viewBox.baseVal.width, height: svg.viewBox.baseVal.height }));
+      assert.equal(points.length, 8);
+      for (const point of points) {
+        assert.equal(point.x, expected[point.id][kind === "qubits" ? 5 : 0]);
+        assert.equal(point.y, expected[point.id][kind === "qubits" ? 6 : 1]);
+        assert.ok(Number.isFinite(point.cx) && Number.isFinite(point.cy));
+        const x = Number(axes.left) + Number(BigInt(point.x) * 1000000n / BigInt(axes.xMax)) / 1000000 * (axes.width - Number(axes.left) - Number(axes.right));
+        const y = Number(axes.top) + (1 - Number(BigInt(point.y) * 1000000n / BigInt(axes.yMax)) / 1000000) * (axes.height - Number(axes.top) - Number(axes.bottom));
+        assert.ok(Math.abs(point.cx - x) < 0.00001 && Math.abs(point.cy - y) < 0.00001, "Scatter coordinates must derive from the exact source values.");
+      }
+      const point = page.locator(`[data-scatter="${kind}"] [data-point="4c"]`);
+      await point.focus();
+      await point.press("Enter");
+      assert.match(await text(page, `#point-detail-${kind}`), /IQPE N2/);
+      assert.equal(await text(page, `#point-detail-${kind} [data-exact-x]`), kind === "qubits" ? "9" : "6,232");
+    }
+    assert.match(await text(page, "main"), /w\/o move/);
     await page.locator("#point-detail-operations a").click();
-    assert.equal(await page.inputValue("#candidate-select"), "App 1a");
-    assert.equal(await page.inputValue("#snapshot-select"), "App 1a-2026-09-22-0");
+    assert.equal(await page.inputValue("#candidate-select"), "4c");
+    await page.selectOption("#overview-mode", "global");
+    assert.equal(await page.locator("[data-global-chart] g[data-global-id]").count(), 8);
+    assert.equal(await page.locator("[data-global-chart] path[data-series]").count(), 0, "No invented baseline trend line.");
+    const colors = await page.locator("[data-global-chart] g[data-global-id]").evaluateAll(points => points.map(point => point.getAttribute("stroke")));
+    assert.equal(new Set(colors).size, 8);
+    for (const [metric, index] of [["logicalOps", 0], ["logicalQubits", 5]]) {
+      await page.selectOption("#global-metric", metric);
+      const points = await page.locator("[data-global-chart] g[data-global-id]").evaluateAll(points => points.map(point => ({ id: point.dataset.globalId, value: point.dataset.value, cy: Number(point.dataset.y) })));
+      const axes = await page.locator("[data-global-chart]").evaluate(svg => ({ ...svg.dataset, height: svg.viewBox.baseVal.height }));
+      assert.equal(points.length, 8);
+      for (const point of points) {
+        assert.equal(point.value, expected[point.id][index]);
+        const expectedY = Number(axes.top) + (1 - Number(BigInt(point.value) * 1000000n / BigInt(axes.maximum)) / 1000000) * (axes.height - Number(axes.top) - Number(axes.bottom));
+        assert.ok(Math.abs(point.cy - expectedY) < 0.00001);
+      }
+      await page.locator(`[data-global-chart] [data-global-id="3a"]`).focus();
+      assert.match(await text(page, "#global-point-detail"), /IQPE extended Hubbard Ethylene/);
+    }
+    await page.locator('[data-global-visible="4c"]').uncheck();
+    assert.equal(await page.locator('[data-global-chart] [data-global-id="4c"]').count(), 0);
+    await page.locator('[data-action="show-all-series"]').click();
+    assert.equal(await page.locator("[data-global-chart] g[data-global-id]").count(), 8);
+    const globalUrl = page.url();
+    const fresh = await open(globalUrl);
+    assert.equal(await fresh.page.inputValue("#overview-mode"), "global");
+    assert.equal(await fresh.page.inputValue("#global-metric"), "logicalQubits");
+    await fresh.context.close();
   } finally { await context.close(); }
 }
 
-async function estimateSaves() {
-  const { page, context } = await createPage(route("edit"));
-  try {
-    const original = await page.inputValue('[data-workload-id="App 1a"][data-field="physicalOps"]');
-    await page.locator('[data-workload-id="App 1a"][data-field="logicalOps"]').evaluate(input => {
-      const clipboardData = new DataTransfer();
-      clipboardData.setData("text/plain", "1.14e8\t1.425e11\n1.8e8\t2.7e11");
-      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
-    });
-    assert.equal(await page.inputValue('[data-workload-id="App 1a"][data-field="logicalOps"]'), "114,000,000");
-    assert.equal(await page.inputValue('[data-workload-id="App 1a"][data-field="physicalOps"]'), "142,500,000,000");
-    assert.ok(await page.locator('[data-row-check="App 1b"]').isChecked());
-    await count(page, "logicalOps", "114000000");
-    await count(page, "physicalOps", "1.5");
-    await page.fill("#change-note", "Synthetic revised schedule for this test.");
-    await page.locator("#save-updates").click();
-    assert.match(await text(page, "#editor-errors"), /Nothing was saved/);
-    await count(page, "physicalOps", original);
-    await page.locator('[data-workload-id="App 1a"][data-field="logicalOps"]').evaluate(input => {
-      const clipboardData = new DataTransfer();
-      clipboardData.setData("text/plain", "9\tinvalid");
-      input.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
-    });
-    assert.equal(await page.inputValue('[data-workload-id="App 1a"][data-field="logicalOps"]'), "114,000,000");
-    assert.match(await text(page, "#editor-errors"), /Paste rejected; no cells changed/);
-    await count(page, "physicalOps", "142500000000");
-    await count(page, "logicalQubits", "230");
-    await count(page, "physicalQubits", "345000");
-    await page.locator("#editor-context > summary").click();
-    await contextField(page, "maturity").selectOption("Provisional");
-    await page.locator("#save-updates").click();
-    assert.equal(await text(page, "[data-metric='logicalOps']"), "114M");
-    assert.equal(await text(page, "[data-metric='logicalQubits']"), "230");
-    await openResourceDetails(page);
-    assert.match(await text(page, ".goal-line"), /345K physical qubits.*5K above target; 1.5%/);
-    assert.match(await text(page, ".estimate-meta"), /Provisional.*in-tab/);
-    const localUrl = page.url();
-    assert.match(new URL(localUrl).searchParams.get("snapshot"), /^local-/);
-    await page.locator("#share-action").click();
-    const publishedUrl = await page.inputValue("#share-url");
-    assert.match(await text(page, "#share-copy"), /in-tab edits that another visitor cannot load/);
-    assert.equal(new URL(publishedUrl).searchParams.get("snapshot"), "App 1a-2026-09-22-0");
-    assert.ok(!publishedUrl.includes("Synthetic") && !publishedUrl.includes("345000") && !publishedUrl.includes("Demo+engineer"));
-    await page.locator("[data-action='close-share']").click();
-    const unavailable = await createPage(localUrl);
-    assert.match(await text(unavailable.page, ".unavailable-view"), /In-tab edits are not published server data/);
-    await unavailable.context.close();
-    const publishedPage = await createPage(publishedUrl);
-    assert.equal(await text(publishedPage.page, "[data-metric='logicalOps']"), "120M");
-    await publishedPage.context.close();
-    await nav(page, "updates");
-    assert.equal(await page.locator("[data-update-id]").count(), 3, "Saving counts must not evict briefing bullets.");
-    await nav(page, "compare");
-    assert.equal(await page.locator("[data-scatter='qubits'] [data-point='App 1a']").getAttribute("data-x"), "230");
-    assert.equal(await page.locator("[data-scatter='qubits'] [data-point='App 1a']").getAttribute("data-y"), "345000");
-    assert.equal(await page.locator("[data-scatter='operations'] [data-point='App 1a']").getAttribute("data-x"), "114000000");
-    assert.equal(await page.locator("[data-scatter='operations'] [data-point='App 1a']").getAttribute("data-y"), "142500000000");
-    await mode(page, "engineering");
-    await page.fill("#estimate-date", "2026-09-01");
-    await count(page, "logicalOps", "115000000");
-    await page.fill("#change-note", "Synthetic correction to an earlier dated snapshot.");
-    await page.locator("#save-updates").click();
-    assert.equal(await text(page, "[data-metric='logicalOps']"), "114M", "Backdating must not replace the latest dated estimate.");
-    assert.equal(await page.locator("#snapshot-select option").count(), 8);
-    await selectSnapshot(page, "App 1a-2026-09-22-0");
-    assert.equal(await text(page, "[data-metric='logicalOps']"), "120M", "Original revision remains available.");
-    await mode(page, "engineering");
-    await page.locator("#editor-context > summary").click();
-    await contextField(page, "targetPhysicalQubits").fill("330000");
-    await contextField(page, "targetDate").fill("2026-10-22");
-    await page.fill("#change-note", "Synthetic shared target revision.");
-    await page.locator("#save-updates").click();
-    await openResourceDetails(page);
-    assert.match(await text(page, ".goal-line"), /330K target by 22 Oct 2026.*15K above target; 4.5%/);
-    await nav(page, "updates");
-    assert.match(await text(page, '[data-linked-target="App 1a"]'), /330K target by 22 Oct 2026.*15K above target/);
-    await mode(page, "engineering");
-    await count(page, "logicalOps", "0");
-    await count(page, "logicalQubits", "0");
-    await page.locator("#editor-context > summary").click();
-    await contextField(page, "targetPhysicalQubits").fill("0");
-    await page.fill("#change-note", "Synthetic zero-denominator example.");
-    await page.locator("#save-updates").click();
-    await openResourceDetails(page);
-    assert.match(await text(page, ".goal-line"), /Percentage unavailable for a zero target/);
-    assert.deepEqual(await page.locator(".overhead strong").allTextContents(), ["Not available", "Not available"]);
-    await mode(page, "engineering");
-    await page.locator("#editor-context > summary").click();
-    await contextField(page, "config").fill("demo-new-basis");
-    await page.fill("#change-note", "Synthetic new assumptions basis.");
-    await page.locator("#save-updates").click();
-    await openResourceDetails(page);
-    assert.match(await text(page, ".goal-line"), /Not comparable/);
-    assert.equal(await page.locator(".overview-notice").count(), 1);
-    assert.match(await text(page, ".overview-notice"), /No comparable earlier estimate on demo-new-basis/);
-    assert.equal(await page.locator(".delta").getByText("Change unavailable").count(), 2);
-    await nav(page, "compare");
-    assert.equal(await page.locator("[data-scatter='qubits'] [data-point='App 1a']").getAttribute("data-x"), "0");
-  } finally { await context.close(); }
-}
-
-async function writtenWorkflow() {
-  const { page, context } = await createPage(route("write"));
-  try {
-    await page.locator("[data-action='new-written']").click();
-    assert.match(await written(page, "body").inputValue(), /revised circuit schedule/);
-    await page.locator("#written-form button[type='submit']").click();
-    assert.match(await text(page, "#written-errors"), /Short headline is required/);
-    assert.equal(await page.locator(".writing-list > li").count(), 3);
-    await written(page, "title").fill("Synthetic leadership request");
-    await written(page, "body").fill("A fictional review note shared by both leadership views.");
-    await page.locator(".optional-request summary").click();
-    await written(page, "requestKind").selectOption("Decision");
-    await written(page, "request").fill("Choose the fictional review scope.");
-    await page.locator("#written-form button[type='submit']").click();
-    assert.match(await text(page, "#written-errors"), /both its text and its owner/);
-    await written(page, "requestOwner").fill("Demo lead A");
-    await written(page, "requestDue").fill("2026-09-30");
-    await mode(page, "leadership");
-    assert.ok(await page.locator("#discard-dialog").isVisible());
-    await page.locator("#keep-editing").click();
-    assert.equal(await written(page, "title").inputValue(), "Synthetic leadership request");
-    await page.locator("#written-form button[type='submit']").click();
-    assert.equal(await page.locator(".writing-list > li").count(), 4);
-    assert.ok(await page.locator("[data-action='new-written']").isDisabled());
-    const newId = await page.locator(".writing-list > li").last().getAttribute("data-written-id");
-    for (let i = 0; i < 3; i++) await page.locator(`[data-written-id="${newId}"] [data-direction="-1"]`).click();
-    await mode(page, "leadership");
-    assert.equal(await page.locator("[data-briefing-id]").count(), 0, "The briefing no longer occupies Overview.");
-    await nav(page, "updates");
-    assert.equal(await page.locator("[data-update-id]").first().getAttribute("data-update-id"), newId);
-    assert.match(await text(page, `[data-update-id="${newId}"]`), /fictional review note.*Decision:/s);
-    assert.match(await text(page, `[data-update-id="${newId}"]`), /Choose the fictional review scope.*Demo lead A/);
-    await mode(page, "engineering");
-    await nav(page, "write");
-    await page.locator(`[data-written-id="${newId}"] [data-action="edit-written"]`).click();
-    await written(page, "title").fill("Revised synthetic leadership request");
-    await page.locator("#written-form button[type='submit']").click();
-    await page.locator(`[data-written-id="${newId}"] [data-action="archive-written"]`).click();
-    assert.equal(await page.locator(".writing-list > li").count(), 3);
-    await page.locator(".written-history summary").click();
-    assert.match(await text(page, ".written-history"), /Synthetic leadership request/);
-    assert.match(await text(page, ".written-history"), /Revised synthetic leadership request/);
-    await page.locator(`[data-action="restore-written"][data-id="${newId}"]`).click();
-    assert.equal(await page.locator(".writing-list > li").count(), 4);
-    await page.locator(`[data-written-id="${newId}"] [data-action="edit-written"]`).click();
-    await written(page, "title").fill("This cancelled title must not publish");
-    await page.locator("[data-action='cancel-written']").click();
-    await page.locator("#discard-edits").click();
-    assert.match(await text(page, `[data-written-id="${newId}"]`), /Revised synthetic leadership request/);
-    await page.locator("[data-written-id='update-2'] [data-action='archive-written']").click();
-    await page.locator("[data-action='new-written']").click();
-    await written(page, "title").fill("Replacement fictional briefing bullet");
-    await written(page, "scope").selectOption("system:2");
-    await page.locator("#written-form button[type='submit']").click();
-    await page.locator(".written-history summary").click();
-    await page.locator("[data-action='restore-written'][data-id='update-2']").click();
-    assert.match(await text(page, ".inline-message.error"), /Four briefing bullets are already active/);
-    assert.equal(await page.locator(".writing-list > li").count(), 4);
-    await page.locator("[data-action='writing-panel'][data-kind='milestones']").click();
-    await page.locator("[data-written-id='milestone-1'] [data-action='edit-written']").click();
-    await written(page, "title").fill("Synthetic comparison review");
-    await written(page, "outcome").fill("Record the fictional comparison decision.");
-    await written(page, "targetDate").fill("2026-09-30");
-    await written(page, "endDate").fill("2026-09-29");
-    await page.locator("#written-form button[type='submit']").click();
-    assert.match(await text(page, "#written-errors"), /on or after its start/);
-    await written(page, "endDate").fill("2026-10-01");
-    await written(page, "status").selectOption("Blocked");
-    await written(page, "dependencies").fill("Waiting for fictional timing input.");
-    await page.locator("#written-form button[type='submit']").click();
-    await mode(page, "leadership");
-    assert.equal(await page.locator(".overview-notice").count(), 1);
-    assert.match(await text(page, ".overview-notice"), /Blocker recorded: Synthetic comparison review/);
-    assert.equal(await page.locator("[data-next-milestone]").count(), 0, "No planning panel was added back to Overview.");
-    await page.locator(".overview-notice a").click();
-    assert.match(await text(page, "[data-milestone-id='milestone-1']"), /Synthetic comparison review.*fictional comparison decision.*30 Sept? 2026 to 1 Oct 2026.*Blocked.*fictional timing input/s);
-    await mode(page, "engineering");
-    await nav(page, "write");
-    await page.locator("[data-action='writing-panel'][data-kind='milestones']").click();
-    await page.locator("[data-written-id='milestone-3'] [data-action='edit-written']").click();
-    assert.ok(await written(page, "targetDate").isDisabled());
-    assert.match(await text(page, "#linked-target-preview"), /340K physical-qubit objective.*20 Oct 2026/);
-    await page.locator("[data-action='cancel-written']").click();
-    await page.locator("[data-action='new-written']").click();
-    await written(page, "title").fill("Fictional immediate milestone");
-    await written(page, "outcome").fill("A new fictional next step.");
-    await written(page, "targetDate").fill("2026-09-25");
-    await page.locator("#written-form button[type='submit']").click();
-    const milestoneId = await page.locator(".writing-list > li").last().getAttribute("data-written-id");
-    await mode(page, "leadership");
-    assert.ok(!(await text(page, "main")).includes("Fictional immediate milestone"));
-    await nav(page, "updates");
-    assert.match(await text(page, `[data-milestone-id="${milestoneId}"]`), /Fictional immediate milestone.*A new fictional next step.*25 Sept? 2026/);
-    await mode(page, "engineering");
-    await nav(page, "write");
-    await page.locator("[data-action='writing-panel'][data-kind='milestones']").click();
-    await page.locator(`[data-written-id="${milestoneId}"] [data-action="archive-written"]`).click();
-    await mode(page, "leadership");
-    await nav(page, "updates");
-    assert.equal(await page.locator(`[data-milestone-id="${milestoneId}"]`).count(), 0);
-    assert.match(await text(page, "[data-milestone-id='milestone-1']"), /Synthetic comparison review/);
-    await page.locator("[data-action='reset']").click();
-    assert.equal(await page.locator(".overview-notice").count(), 0);
-    await nav(page, "updates");
-    assert.equal(await page.locator("[data-update-id]").count(), 3);
-    assert.match(await text(page, "[data-milestone-id='milestone-1']"), /Confirm the comparison basis/);
-  } finally { await context.close(); }
-}
-
-async function unsavedHistory() {
-  const { page, context } = await createPage();
-  try {
-    await mode(page, "engineering");
-    const editorUrl = page.url();
-    await page.fill("#change-note", "Keep this draft through cancelled navigation.");
-    await page.evaluate(() => history.back());
-    await page.locator("#discard-dialog").waitFor({ state: "visible" });
-    assert.equal(page.url(), editorUrl, "Back navigation should be rewound while confirmation is open.");
-    await page.locator("#keep-editing").click();
-    assert.equal(await page.inputValue("#change-note"), "Keep this draft through cancelled navigation.");
-    await page.evaluate(() => history.back());
-    await page.locator("#discard-dialog").waitFor({ state: "visible" });
-    await page.locator("#discard-edits").click();
-    await page.locator("#candidate-select").waitFor();
-    assert.equal(new URL(page.url()).hash, "#overview");
-    await page.goForward();
-    assert.equal(new URL(page.url()).hash, "#edit");
-    assert.equal(await page.inputValue("#change-note"), "");
-    await nav(page, "write");
-    await page.locator("[data-action='new-written']").click();
-    await written(page, "title").fill("Unsaved written draft");
-    await page.evaluate(() => history.back());
-    await page.locator("#discard-dialog").waitFor({ state: "visible" });
-    await page.locator("#keep-editing").click();
-    assert.equal(await written(page, "title").inputValue(), "Unsaved written draft");
-    await nav(page, "edit");
-    await page.locator("#discard-edits").click();
-    assert.equal(new URL(page.url()).hash, "#edit");
-  } finally { await context.close(); }
-}
-
-async function fixtures() {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+async function numericalFixtures() {
+  const context = await browser.newContext();
   try {
     await context.addInitScript(() => {
-      Object.defineProperty(window, "RESOURCE_DEMO", { configurable: true, set(value) {
+      Object.defineProperty(window, "RESOURCE_DATA", { configurable: true, set(value) {
         const data = structuredClone(value);
-        const first = data.workloads[0].snapshots.at(-1);
-        data.workloads[1].snapshots.at(-1).metrics = structuredClone(first.metrics);
-        first.metrics.logicalOps = "900719925474099312345678901234567890";
-        first.metrics.physicalOps = "90071992547409931234567890123456789100";
-        data.workloads[2].snapshots.at(-1).metrics.logicalQubits = "0";
-        data.workloads[2].snapshots.at(-1).metrics.physicalQubits = "0";
-        data.workloads[3].snapshots.at(-1).metrics.logicalQubits = null;
-        data.workloads[4].snapshots.at(-2).metrics.logicalOps = "0";
-        first.reason = "This synthetic engineering note must remain available in full without truncation. ".repeat(4).trim();
-        first.caveat = "This fictional caveat is intentionally longer than one line. ".repeat(4).trim();
-        for (const snapshot of data.workloads[5].snapshots) {
-          snapshot.metrics.logicalOps = null;
-          snapshot.metrics.logicalQubits = null;
-        }
-        Object.defineProperty(window, "RESOURCE_DEMO", { value: data, configurable: true });
+        const base = data.workloads[0].snapshots[0];
+        const first = structuredClone(base);
+        Object.assign(first, { id: "test-first", asOf: "2026-09-01", local: true });
+        first.metrics.logicalOps = "0";
+        first.metrics.logicalQubits = "0";
+        const second = structuredClone(first);
+        Object.assign(second, { id: "test-second", asOf: "2026-09-08" });
+        second.metrics.logicalOps = "900719925474099312345678901234567890";
+        second.context.targetPhysicalQubits = "0";
+        second.context.targetWindow = "Next sprint";
+        second.context.targetConfig = second.config;
+        data.workloads[0].snapshots.push(first, second);
+        data.workloads[1].snapshots[0].metrics.logicalQubits = null;
+        Object.defineProperty(window, "RESOURCE_DATA", { value: data, configurable: true });
       } });
     });
     const page = await context.newPage();
-    page.on("pageerror", error => pageErrors.push(error.stack));
-    await page.goto(route("compare"));
-    assert.equal(await page.locator("[data-scatter='qubits'] [data-point]").count(), 6);
-    assert.equal(await page.locator("[data-scatter='operations'] [data-point]").count(), 7);
-    const first = page.locator("[data-scatter='qubits'] [data-point='App 1a']");
-    const coincident = page.locator("[data-scatter='qubits'] [data-point='App 1b']");
-    assert.equal(await first.getAttribute("data-cx"), await coincident.getAttribute("data-cx"));
-    assert.equal(await first.getAttribute("data-cy"), await coincident.getAttribute("data-cy"));
-    for (const id of ["App 1a", "App 1b", "App 2b"]) {
-      await page.locator(`.point-picker [data-plot="qubits"][data-point="${id}"]`).click();
-      assert.match(await text(page, "#point-detail-qubits"), new RegExp(id));
-    }
-    assert.match(await text(page, "#point-detail-qubits"), /Not plotted: both counts are required/);
-    await page.locator(".point-picker [data-plot='operations'][data-point='App 1a']").click();
-    assert.equal(await text(page, "#point-detail-operations [data-exact-x]"), "900,719,925,474,099,312,345,678,901,234,567,890");
-    const badCoordinates = await page.locator("[data-scatter] [data-point]").evaluateAll(points => points.some(point => !Number.isFinite(Number(point.dataset.cx)) || !Number.isFinite(Number(point.dataset.cy))));
-    assert.equal(badCoordinates, false);
-    await page.goto(route("overview", { candidate: "App 2c" }));
-    assert.match(await page.locator(".delta").first().innerText(), /Percentage unavailable: previous count is zero/);
-    await page.goto(route("overview", { candidate: "App 1a" }));
-    assert.ok(await page.locator("[data-action='show-change-note']").isVisible());
-    await page.locator("[data-action='show-change-note']").click();
-    assert.equal(await text(page, "#snapshot-change-note .written-prose"), "This synthetic engineering note must remain available in full without truncation. ".repeat(4).trim());
-    assert.ok((await text(page, "#resource-details")).includes("This fictional caveat is intentionally longer than one line. ".repeat(4).trim()));
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    await page.goto(route("overview", { candidate: "App 3a" }));
-    assert.equal(await page.locator(".chart-empty").count(), 2);
-    assert.deepEqual(await page.locator("[data-metric]").allTextContents(), ["Not supplied", "Not supplied"]);
-    await openResourceDetails(page);
-    assert.deepEqual(await page.locator(".overhead strong").allTextContents(), ["Not available", "Not available"]);
+    page.on("pageerror", error => errors.push(error.stack));
+    await page.goto(urlFor("overview"));
+    assert.match(await page.locator(".delta").first().innerText(), /previous count is zero/);
+    await details(page);
+    assert.match(await text(page, ".goal-line"), /Percentage unavailable for a zero target/);
+    assert.equal(await page.locator(".overhead strong").nth(1).innerText(), "Not available");
+    await page.selectOption("#overview-mode", "global");
+    const raw = await page.locator('[data-global-chart] [data-snapshot="test-second"]').getAttribute("data-value");
+    assert.equal(raw, "900719925474099312345678901234567890");
+    assert.equal(await page.locator("[data-series='1a']").count(), 1);
+    assert.equal(await page.locator("[data-global-chart] g[data-global-id]").count(), 2, "Undated candidates must not acquire fake historical dates.");
+    const invalid = await page.locator("[data-global-chart] [data-x]").evaluateAll(points => points.some(point => !Number.isFinite(Number(point.dataset.x)) || !Number.isFinite(Number(point.dataset.y))));
+    assert.equal(invalid, false);
+    await nav(page, "compare");
+    assert.equal(await page.locator("[data-scatter='qubits'] g[data-point]").count(), 7);
   } finally { await context.close(); }
 }
 
-async function responsiveAndVisual() {
+async function responsive() {
   for (const width of [320, 390, 768, 1440]) {
-    const { page, context } = await createPage(route("overview"), { viewport: { width, height: width < 600 ? 844 : 900 } });
+    const { context, page } = await open(urlFor("overview"), { viewport: { width, height: width < 600 ? 844 : 900 } });
     try {
-      for (const tab of ["overview", "compare", "write"]) {
-        if (tab === "compare") await nav(page, "compare");
-        if (tab === "write") {
-          await mode(page, "engineering");
-          await nav(page, "write");
-          await page.locator("[data-action='writing-panel'][data-kind='milestones']").click();
-          await page.locator("[data-written-id='milestone-1'] [data-action='edit-written']").click();
-        }
+      for (const view of ["overview", "global", "compare", "roadmap"]) {
+        if (view === "global") await page.selectOption("#overview-mode", "global");
+        if (view === "compare") await nav(page, "compare");
+        if (view === "roadmap") { await mode(page, "engineering"); await nav(page, "roadmap"); }
         const layout = await page.evaluate(() => ({
-          width: innerWidth, scroll: document.documentElement.scrollWidth,
-          tooSmall: [...document.querySelectorAll(".workload-date,.overview-notice,.chart-caption,.milestone-status,.estimate-meta,.resource-details p,.field-hint,.chart text")]
+          width: innerWidth, scrollWidth: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
+          small: [...document.querySelectorAll(".estimate-meta,.chart-caption,.stage-title,.stage-status,.series-legend label,.field-hint,.comparison-caption")]
             .filter(element => element.getClientRects().length && parseFloat(getComputedStyle(element).fontSize) < 12).map(element => element.className)
         }));
-        assert.ok(layout.scroll <= layout.width + 1, `${tab} overflows at ${width}px: ${layout.scroll}`);
-        assert.deepEqual(layout.tooSmall, [], `${tab} text size at ${width}px`);
-        if (tab === "overview") {
-          const measurement = await overviewMeasurements(page);
-          overviewLayouts.push(measurement);
-          assert.ok(measurement.defaultMainWords <= 175, `Default Overview contains ${measurement.defaultMainWords} words at ${width}px; secondary reports must stay on demand.`);
-          assert.equal(measurement.charts.length, 2);
-          assert.equal(measurement.headlines.length, 2);
-          assert.ok(!await page.locator("#resource-details").evaluate(element => element.open));
-          if (width === 1440) {
-            assert.ok(measurement.charts.every(chart => chart.bottom <= 820), "Both plotted trends must fit comfortably on the first desktop screen.");
-            assert.ok(measurement.pageHeight <= 950, "Default desktop Overview should not be a long report.");
-          }
-          if (width === 390) {
-            assert.ok(measurement.headlines.every(metric => metric.bottom <= 844), "Both headline counts must be quickly reachable on mobile.");
-            assert.ok(measurement.charts[0].top < 600, "No briefing or planning text should precede the mobile trends.");
-            assert.ok(measurement.pageHeight <= 1500, "Default mobile Overview must be materially shorter.");
-          }
-          const chartRect = await page.locator(".chart").first().boundingBox();
-          const chartFonts = await page.locator(".chart").first().evaluate(svg => ({
-            pixels: parseFloat(getComputedStyle(svg.querySelector("text")).fontSize),
-            coordinateWidth: svg.viewBox.baseVal.width
-          }));
-          assert.ok(chartFonts.pixels * chartRect.width / chartFonts.coordinateWidth >= 12, "Chart text must remain legible after SVG scaling.");
-        }
-        if (tab === "compare") {
-          const labels = await page.locator("[data-scatter]").evaluateAll(plots => plots.map(plot => {
-            const points = [...plot.querySelectorAll(".marker-point")].map(point => ({ x: point.cx.baseVal.value, y: point.cy.baseVal.value }));
-            const boxes = [...plot.querySelectorAll(".point-label")].map(label => ({ x: label.x.baseVal.value, y: label.y.baseVal.value, width: label.width.baseVal.value, height: label.height.baseVal.value }));
-            return {
-              count: boxes.length,
-              overlapsPoint: boxes.some(box => points.some(point => point.x >= box.x && point.x <= box.x + box.width && point.y >= box.y && point.y <= box.y + box.height)),
-              overlapsLabel: boxes.some((box, index) => boxes.slice(index + 1).some(other => box.x < other.x + other.width && box.x + box.width > other.x && box.y < other.y + other.height && box.y + box.height > other.y))
-            };
-          }));
-          for (const label of labels) assert.deepEqual(label, { count: 8, overlapsPoint: false, overlapsLabel: false }, `Point labels at ${width}px`);
-        }
+        assert.ok(layout.scrollWidth <= width + 1, `${view} overflow at ${width}px: ${layout.scrollWidth}`);
+        assert.deepEqual(layout.small, []);
+        const clipped = await page.locator("svg.chart,svg.scatter").evaluateAll(charts => charts.flatMap(svg => [...svg.querySelectorAll("text")].filter(label => {
+          const box = label.getBBox();
+          const size = parseFloat(getComputedStyle(label).fontSize) * svg.getBoundingClientRect().width / svg.viewBox.baseVal.width;
+          return box.x < -1 || box.x + box.width > svg.viewBox.baseVal.width + 1 || size < 12;
+        }).map(label => label.textContent)));
+        assert.deepEqual(clipped, [], `${view} chart labels must not be clipped or shrunk at ${width}px`);
+        layouts.push({ view, ...layout });
         if (artifacts && process.argv.includes("--visual") && [390, 1440].includes(width)) {
           await fs.mkdir(artifacts, { recursive: true });
-          await page.evaluate(() => window.scrollTo(0, 0));
-          await page.screenshot({ path: path.join(artifacts, `${width}-${tab}.png`), fullPage: true });
-          if (tab === "overview") await page.screenshot({ path: path.join(artifacts, `${width}-${tab}-viewport.png`) });
+          await page.evaluate(() => scrollTo(0, 0));
+          await page.screenshot({ path: path.join(artifacts, `${width}-${view}.png`), fullPage: true });
         }
       }
     } finally { await context.close(); }
   }
 }
 
+async function freePort() {
+  const listener = net.createServer();
+  await new Promise(resolve => listener.listen(0, "127.0.0.1", resolve));
+  const port = listener.address().port;
+  await new Promise(resolve => listener.close(resolve));
+  return port;
+}
+
+async function startServer(database, port) {
+  const child = spawn(process.env.PYTHON || "python", [path.join(directory, "server.py"), "--database", database, "--port", String(port)], { windowsHide: true });
+  let output = "";
+  child.stdout.on("data", chunk => { output += chunk; });
+  child.stderr.on("data", chunk => { output += chunk; });
+  let lastError;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (child.exitCode !== null) throw new Error(`Database process exited: ${output}`);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/state`);
+      await response.arrayBuffer();
+      if (response.ok) return { child, origin: `http://127.0.0.1:${port}/` };
+    } catch (error) { lastError = error; }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  child.kill();
+  throw new Error(`Database did not start: ${output} ${lastError?.message || ""}`);
+}
+
+async function stopServer(child) {
+  if (child.exitCode !== null) return;
+  const exited = new Promise(resolve => child.once("exit", resolve));
+  child.kill();
+  await exited;
+}
+
+async function privateWorkspace() {
+  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "resource-estimates-check-"));
+  const database = path.join(temporary, "inputs.sqlite");
+  const port = await freePort();
+  let service = await startServer(database, port);
+  const { context, page } = await open(service.origin);
+  try {
+    assert.equal(await page.locator("body").getAttribute("data-storage"), "private");
+    await mode(page, "engineering");
+    await page.fill("#estimate-date", "2026-09-23");
+    await page.fill("#change-note", "Test-only saved estimate; not published.");
+    await countField(page, "logicalOps").fill("1.5");
+    await page.locator("#save-updates").click();
+    assert.match(await text(page, "#editor-errors"), /Nothing was saved/);
+    let stored = await page.request.get(`${service.origin}api/state`).then(response => response.json());
+    assert.equal(stored.revision, 0);
+    await countField(page, "logicalOps").fill("6.4e2");
+    await countField(page, "physicalOps").fill("325,000");
+    await countField(page, "logicalQubits").fill("10");
+    await countField(page, "physicalQubits").fill("230");
+    await page.locator("#editor-context > summary").click();
+    await contextField(page, "owner").fill("Test engineer");
+    await contextField(page, "maturity").selectOption("Reviewed");
+    await page.locator("#save-updates").click();
+    await page.waitForURL(/#overview$/);
+    assert.deepEqual(await page.locator("[data-metric]").allTextContents(), ["640", "10"]);
+    await page.reload();
+    await page.locator('[data-metric="logicalOps"]').waitFor();
+    assert.deepEqual(await page.locator("[data-metric]").allTextContents(), ["640", "10"]);
+    const localUrl = page.url();
+    await page.locator("#share-action").click();
+    const publicUrl = await page.inputValue("#share-url");
+    assert.equal(new URL(publicUrl).searchParams.get("snapshot"), "source-1a-v1");
+    assert.ok(!publicUrl.includes("Test") && !publicUrl.includes("325000"));
+    assert.match(await text(page, "#share-copy"), /private database records/);
+    await page.locator('[data-action="close-share"]').click();
+    await nav(page, "compare");
+    assert.equal(await page.locator("[data-scatter='operations'] [data-point='1a']").getAttribute("data-x"), "640");
+    await mode(page, "engineering");
+    await nav(page, "records");
+    assert.match(await text(page, ".raw-records"), /6.4e2|estimates/);
+    const rawResponse = await page.request.get(`${service.origin}api/records`).then(response => response.json());
+    const submission = rawResponse.records.find(record => record.kind === "estimates");
+    assert.equal(submission.raw.rows[0].metrics.logicalOps, "6.4e2");
+    assert.equal(submission.raw.rows[0].metrics.physicalOps, "325,000");
+    assert.equal((await page.request.get(`${service.origin}api/database`)).status(), 200);
+    assert.equal((await page.request.get(`${service.origin}api/export`)).status(), 200);
+    await nav(page, "edit");
+    await page.fill("#estimate-date", "2026-09-30");
+    await page.fill("#change-note", "Test-only second dated estimate.");
+    await countField(page, "logicalOps").fill("1280");
+    await page.locator("#editor-context > summary").click();
+    await contextField(page, "targetPhysicalQubits").fill("200");
+    await contextField(page, "targetWindow").fill("Next sprint");
+    await contextField(page, "targetConfig").fill("clifford-rounded-no-move");
+    await page.locator("#save-updates").click();
+    await page.waitForURL(/#overview$/);
+    assert.match(await page.locator(".delta").first().innerText(), /100% higher/);
+    await details(page);
+    assert.match(await text(page, ".goal-line"), /200 target.*Next sprint.*30 above target; 15%/);
+    await page.selectOption("#overview-mode", "global");
+    assert.equal(await page.locator("[data-series='1a']").count(), 1);
+    await mode(page, "engineering");
+    await nav(page, "write");
+    for (let i = 1; i <= 4; i++) {
+      await page.locator('[data-action="new-written"]').click();
+      await field(page, "title").fill(`Test briefing ${i}`);
+      await field(page, "body").fill("Test-only leadership context.");
+      await field(page, "date").fill("2026-09-23");
+      await field(page, "owner").fill("Test engineer");
+      await page.locator("#written-form button[type='submit']").click();
+      await page.locator("#written-form").waitFor({ state: "detached" });
+    }
+    assert.ok(await page.locator('[data-action="new-written"]').isDisabled());
+    const lastId = await page.locator(".writing-list > li").last().getAttribute("data-written-id");
+    await page.locator(`[data-written-id="${lastId}"] [data-direction="-1"]`).click();
+    await page.waitForFunction(id => document.querySelectorAll(".writing-list > li")[2]?.dataset.writtenId === id, lastId);
+    await page.locator(`[data-written-id="${lastId}"] [data-action="archive-written"]`).click();
+    await page.locator(`[data-written-id="${lastId}"]`).waitFor({ state: "detached" });
+    await page.locator(".written-history summary").click();
+    await page.locator(`[data-action="restore-written"][data-id="${lastId}"]`).click();
+    await page.locator(`[data-written-id="${lastId}"]`).waitFor();
+    await page.locator(`[data-written-id="${lastId}"] [data-action="edit-written"]`).click();
+    await field(page, "title").fill("Discard this uncommitted note");
+    await page.evaluate(() => history.back());
+    await page.locator("#discard-dialog").waitFor({ state: "visible" });
+    await page.locator("#keep-editing").click();
+    assert.equal(await field(page, "title").inputValue(), "Discard this uncommitted note");
+    await page.locator('[data-action="cancel-written"]').click();
+    await page.locator("#discard-edits").click();
+    await page.locator('[data-action="writing-panel"][data-kind="milestones"]').click();
+    await page.locator('[data-action="new-written"]').click();
+    assert.equal(await page.locator('#written-form input[type="date"]').count(), 0);
+    await field(page, "title").fill("Test sprint milestone");
+    await field(page, "outcome").fill("Test-only resource review.");
+    await field(page, "owner").fill("Test engineer");
+    await field(page, "window").fill("Sprint 3-4");
+    await field(page, "targetCandidate").selectOption("1a");
+    assert.match(await text(page, "#linked-target-preview"), /200 physical-qubit objective.*Next sprint/);
+    await page.locator("#written-form button[type='submit']").click();
+    await page.locator("#written-form").waitFor({ state: "detached" });
+    await mode(page, "leadership");
+    await nav(page, "updates");
+    assert.equal(await page.locator("[data-update-id]").count(), 4);
+    assert.match(await text(page, ".milestones"), /Next sprint.*Test sprint milestone/);
+    await mode(page, "engineering");
+    await nav(page, "roadmap");
+    await page.selectOption("#roadmap-stage", "correctness");
+    await page.selectOption('[data-roadmap="status"]', "In progress");
+    await page.fill('[data-roadmap="owner"]', "Test engineer");
+    await page.fill('[data-roadmap="note"]', "Test-only correctness assessment.");
+    await page.fill('[data-roadmap="window"]', "Next sprint");
+    await page.locator("#save-roadmap").click();
+    await page.locator(".inline-message.success").filter({ hasText: "Roadmap status saved" }).waitFor();
+    await mode(page, "leadership");
+    assert.match(await text(page, "[data-roadmap-stage='correctness']"), /In progress/);
+    const firstWindow = await open(urlFor("edit", {}, service.origin));
+    await firstWindow.page.fill("#estimate-date", "2026-10-01");
+    await firstWindow.page.fill("#change-note", "Stale window must not overwrite.");
+    await countField(firstWindow.page, "logicalOps").fill("1300");
+    await mode(page, "engineering");
+    await page.fill("#estimate-date", "2026-10-01");
+    await page.fill("#change-note", "Concurrent current save.");
+    await countField(page, "logicalOps").fill("1290");
+    await page.locator("#save-updates").click();
+    await page.waitForURL(/#overview$/);
+    await firstWindow.page.locator("#save-updates").click();
+    await firstWindow.page.locator(".inline-message.error").waitFor();
+    assert.match(await text(firstWindow.page, ".inline-message.error"), /Save not confirmed/);
+    assert.equal(await countField(firstWindow.page, "logicalOps").inputValue(), "1,300");
+    await firstWindow.context.close();
+    stored = await page.request.get(`${service.origin}api/state`).then(response => response.json());
+    const revision = stored.revision;
+    await context.close();
+    await stopServer(service.child);
+    service = await startServer(database, port);
+    const response = await fetch(`${service.origin}api/state`).then(response => response.json());
+    assert.equal(response.revision, revision);
+    assert.equal(response.data.workloads[0].snapshots.at(-1).metrics.logicalOps, "1290");
+    assert.ok(response.data.workloads[0].snapshots.some(record => record.id === "source-1a-v1"));
+    assert.ok(localUrl.includes("saved-"));
+  } finally {
+    await context.close();
+    await stopServer(service.child);
+    await fs.rm(temporary, { recursive: true });
+  }
+}
+
 (async () => {
   browser = await chromium.launch(process.env.EDGE_PATH ? { executablePath: process.env.EDGE_PATH, headless: true } : { channel: "msedge", headless: true });
   try {
-    await check("fresh-context links, pinned revisions, native modifiers, recovery, and back/forward", routing);
-    await check("two eight-candidate plots with exact mapping and keyboard point details", plots);
-    await check("atomic estimate validation, exact counts, local-link boundary, history, targets, and zero/basis gaps", estimateSaves);
-    await check("briefing CRUD/reorder/archive/limit and synchronized milestone forms", writtenWorkflow);
-    await check("unsaved estimate and written navigation preserves the history stack", unsavedHistory);
-    await check("coincident, missing, zero, huge-integer plots and zero previous denominators", fixtures);
-    await check("320/390/768/1440 layouts, readable labels, reduced text, and first-screen logical trends", responsiveAndVisual);
-    assert.deepEqual(pageErrors, [], "No browser runtime errors.");
+    await check("all supplied names/counts, source assumptions, undated baseline and read-only public boundary", suppliedData);
+    await check("candidate/system links, published sharing, invalid-state recovery and browser history", links);
+    await check("two exact scatter plots and distinguishable all-candidate global metric chart", plotMapping);
+    if (!process.env.DASHBOARD_URL) await check("zero/huge/missing counts and honest dated versus undated history", numericalFixtures);
+    await check("desktop/tablet/mobile layout and readable labels", responsive);
+    if (process.argv.includes("--private")) await check("durable private raw inputs, exact saves, conflicts, history, sprint editors and roadmap", privateWorkspace);
+    assert.deepEqual(errors, [], "No browser runtime errors.");
     if (artifacts) {
       await fs.mkdir(artifacts, { recursive: true });
-      await fs.writeFile(path.join(artifacts, "checks.json"), JSON.stringify({ verifiedAt: new Date().toISOString(), results, pageErrors }, null, 2));
-      await fs.writeFile(path.join(artifacts, "overview-measurements.json"), JSON.stringify(overviewLayouts, null, 2));
+      await fs.writeFile(path.join(artifacts, "checks.json"), JSON.stringify({ verifiedAt: new Date().toISOString(), results, errors, layouts }, null, 2));
     }
-    console.log(`${results.length} check groups passed; no browser runtime errors.`);
+    console.log(`${results.length} check groups passed.`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

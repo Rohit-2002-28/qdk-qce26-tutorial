@@ -1,15 +1,15 @@
 <!doctype html>
 <!--
-THESIS: Select a candidate and read two logical-resource trends, without a report
-competing for the first screen.
+THESIS: Read supplied application estimates without invented history, and switch
+to one clearly keyed global comparison when needed.
 OWN-WORLD: White working surfaces, graphite text, cool gray rules, one blue accent,
 Segoe UI, exact tabular numbers, native controls, and restrained rectangular forms.
-STORY: Choose a candidate, read its dated counts and compatible changes, then
-inspect details or share the published snapshot when needed.
-FIRST VIEWPORT: Compact system/candidate controls and a quiet metadata line lead
-directly to two number/change/chart pairs. One disclosure contains secondary data.
-FORM: Distill the existing blue-and-white workspace. Written briefing and plans
-remain in Updates & outlook; comparisons and editing retain their own tabs.
+STORY: Choose a named application, inspect its resource basis, and read the global
+roadmap. Engineers preserve exact source submissions in a private local database.
+FIRST VIEWPORT: Application-first controls lead to a selected view or an
+all-application metric chart. Roadmap evidence is separated from completion claims.
+FORM: Extend the existing blue-and-white workspace. Outlook uses sprints, while
+time charts use only supplied estimate dates; published pages remain read-only.
 -->
 <html lang="en">
 <head>
@@ -17,7 +17,7 @@ remain in Updates & outlook; comparisons and editing retain their own tabs.
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="robots" content="noindex,nofollow">
-  <title>Resource estimates - design preview</title>
+  <title>Application resource estimates</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23185185'/%3E%3Cpath d='M8 23V15M16 23V8M24 23V12' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
   <style>
 /* INLINE_STYLES */
@@ -27,19 +27,19 @@ remain in Updates & outlook; comparisons and editing retain their own tabs.
   <a class="skip-link" href="#main">Skip to dashboard content</a>
   <div class="preview-bar">
     <div class="preview-bar-inner">
-      <div><strong>Public review demo</strong><span class="preview-caption">Dummy data only. No sign-in or live storage. Edits reset on reload.</span></div>
-      <nav class="demo-switch" aria-label="Demo view, not access control">
-        <span>Demo view</span>
+      <div><strong>Resource estimates</strong><span class="preview-caption" id="storage-caption">Published source snapshot. Private engineering data is stored separately.</span></div>
+      <nav class="demo-switch" aria-label="Workspace navigation, not access control">
+        <span>Workspace</span>
         <a href="#overview" data-mode="leadership">Leadership</a>
         <a href="#edit" data-mode="engineering">Engineering</a>
       </nav>
       <details class="preview-explanation">
-        <summary>What is simulated?</summary>
+        <summary>Source limits</summary>
         <div>
-          <strong>A public review mockup, not a production application.</strong>
-          <p>All names, counts, targets, timing estimates, and notes are fictional. Do not enter real information.</p>
-          <p>Save updates changes this open page only. Reloading or resetting restores the example data.</p>
-          <p>Production access would use Microsoft Entra ID and server-enforced viewer/editor roles. Those controls are not implemented here.</p>
+          <strong>Source counts, with explicit assumptions.</strong>
+          <p>The supplied emulator rounds non-Clifford angles to the nearest pi/2 multiple. Physical operations retain the source's "w/o move" label.</p>
+          <p>No estimate dates or historical series were supplied. The dashboard does not invent past values, runtime, targets or readiness.</p>
+          <p>Public Pages is a read-only snapshot. Engineer saves require the private local SQLite workspace; the workspace switch is not authentication.</p>
         </div>
       </details>
     </div>
@@ -61,8 +61,8 @@ remain in Updates & outlook; comparisons and editing retain their own tabs.
   </header>
   <main id="main" tabindex="-1"></main>
   <footer class="app-footer">
-    <span>Public review demo <span aria-hidden="true">&middot;</span> All figures are synthetic <span aria-hidden="true">&middot;</span> Reference date: 22 Sep 2026</span>
-    <button type="button" data-action="reset" class="text-button">Reset demo</button>
+    <span>Source tables received 23 Sep 2026 <span aria-hidden="true">&middot;</span> Receipt date is not the estimate date.</span>
+    <button type="button" data-action="reload-data" class="text-button">Reload saved data</button>
   </footer>
   <div class="sr-only" role="status" aria-live="polite" id="announcement"></div>
   <dialog id="share-dialog" aria-labelledby="share-title" aria-describedby="share-copy">
@@ -74,7 +74,7 @@ remain in Updates & outlook; comparisons and editing retain their own tabs.
   </dialog>
   <dialog id="discard-dialog" aria-labelledby="discard-title" aria-describedby="discard-copy">
     <h2 id="discard-title">Discard your unsaved changes?</h2>
-    <p id="discard-copy">Your edits have not been saved. The previously saved demo figures will remain unchanged.</p>
+    <p id="discard-copy">Your edits have not been saved. Previously saved database records will remain unchanged.</p>
     <div class="dialog-actions">
       <button type="button" class="button" id="keep-editing">Keep editing</button>
       <button type="button" class="button primary" id="discard-edits">Discard changes</button>

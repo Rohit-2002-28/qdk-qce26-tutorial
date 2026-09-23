@@ -1,109 +1,169 @@
-# Resource estimates review demo
+# Application resource estimates
 
-[Open the public review demo](https://rohit-2002-28.github.io/qdk-qce26-tutorial/resource-estimates/).
+[Open the published dashboard](https://rohit-2002-28.github.io/qdk-qce26-tutorial/resource-estimates/).
 
-This self-contained static snapshot is for design review only. All names, counts,
-targets, runtime estimates, and notes are synthetic, not real resource estimates.
-Do not enter or commit real, personal, proprietary, or confidential data.
+The current dataset replaces the earlier fictional examples with the application
+names and counts supplied for this review. The original tables are represented
+in `src/data.json`; all counts are exact decimal strings, not floating-point
+measurements. Source-image hashes identify the four supplied screenshots without
+publishing the image files or local filesystem paths.
 
-There is no sign-in, access control, backend, or durable storage. Save updates
-changes only the open browser page in memory; reloading or resetting restores
-the example data. The `noindex,nofollow` tag discourages indexing, not access.
+## Source data and assumptions
 
-## Reading and editing
+| ID | Application | Logical ops | Physical ops (w/o move) | Logical qubits | Physical qubits |
+|---|---|---:|---:|---:|---:|
+| 1a | Spin Dynamics Floquet-3x3 | 638 | 324,305 | 9 | 220 |
+| 1b | Spin Dynamics Floquet-4x3 | 834 | 338,559 | 12 | 240 |
+| 2 | Lasers (Dicke superradiance) | 395 | 109,357 | 4 | 100 |
+| 3a | IQPE extended Hubbard Ethylene | 405 | 167,655 | 5 | 100 |
+| 3b | IQPE extended Hubbard Cyclobutadiene | 1,054 | 492,166 | 9 | 220 |
+| 4a | IQPE H2 | 580 | 185,312 | 5 | 140 |
+| 4b | IQPE LiH | 626 | 191,352 | 5 | 140 |
+| 4c | IQPE N2 | 6,232 | 1,698,744 | 9 | 220 |
 
-- **Leadership** is the default demo view. Overview has one job: choose a
-  candidate and read its **logical operations** and **logical qubits**, each
-  paired with its compatible change and time trend. Compact system/candidate
-  selectors replace the ledger; all-candidate scanning remains in Compare and
-  All metrics. Snapshot history and sharing remain available without adding
-  more report sections to the default screen.
-- **Resource details & assumptions** on Overview contains the selected
-  snapshot's physical counts/current-target gap, overhead ratios, runtime/range,
-  gate share, full change note, caveats, sources, save timestamp and all seven
-  exact counts. This disclosure is closed by default. A long change note has an
-  explicit full-note action; no caveat text is silently truncated. A historical
-  selection is labeled as historical in the date/maturity/configuration line.
-- **Updates & outlook** is the home of the canonical briefing and milestones.
-  The expanded briefing, goals/planning panel and duplicate shortcut row have
-  deliberately been removed from Overview after review feedback about clutter.
-  At most one relevant exception is shown there: an incompatible comparison,
-  an engineer-recorded blocker, or an overdue/future-dated current estimate.
-  Routine plans and requests stay in Updates & outlook.
-- Freshness uses the fixed **22 Sep 2026** demo reference date, not the visitor's
-  clock. Maturity and cadence are engineer-supplied descriptions, not inferred
-  confidence or an approval workflow.
-- **Compare** shows two count-vs-count scatter plots for all eight candidates:
-  logical/physical qubits and logical/physical operations. Points, keyboard
-  controls and the exact-data disclosure use each candidate's latest dated
-  estimate. Workloads and configurations are not automatically comparable.
-  Independent candidates are neither summed nor ranked.
-- **Copy view link** preserves the tab, candidate, system filter and exact
-  published snapshot/configuration. In-tab snapshots cannot be shared as server
-  data: the copy action explicitly offers a published snapshot instead. Opening
-  an unavailable snapshot URL shows a recovery screen, not a substituted count.
-  Written edits are never placed in the URL. A link pins an estimate record, not
-  a historic version of the entire written briefing or milestone plan.
-- Use **Demo view > Engineering > Estimates** for the seven exact counts,
-  rectangular Excel paste and supporting inputs. Valid batches save atomically.
-  Corrections retain prior revisions; backdated entries do not replace a
-  later-dated estimate. Runtime remains a separate supplied model input.
-- Use **Demo view > Engineering > Updates & outlook** for briefing bullets and
-  milestones. At most four briefing bullets may be active; archive before adding
-  another. Edit, reorder with Up/Down, archive and restore without losing earlier
-  text. A new bullet can reuse the scoped estimate's note, date and owner.
-  Estimate saves do not silently add or displace written bullets.
-- Milestones carry scope, outcome, date/window, owner, status and dependencies.
-  Linking a physical-qubit objective reads its value, date and assumptions from
-  that candidate's latest estimate; edit that shared target in Estimates.
-  Full plans and dependencies remain in Updates & outlook, while the selected
-  estimate's target is available in Overview's resource disclosure. Targets
-  remain future objectives, never forecasts or current achievements.
+All seven source metrics, including the three gate categories, remain in All
+metrics and the raw seed. Systems are Magnet Models, Laser Models (Dicke), Model
+Hamiltonian Energy Estimation (Hubbard Model), and Small Chemistry Problems.
 
-The persona switch is a review aid, **not a permission boundary**. All in-memory
-history, written updates and new estimates disappear on reload. Do not use this
-prototype to collect real data.
+The source states: **emulator runs use Clifford-rounding; non-Clifford angles are
+rounded to the nearest pi/2 multiple.** This is an approximation of the original
+circuits, not evidence of their full non-Clifford correctness.
 
-## Updating the standalone artifact
+**Physical operations retain the source qualifier "w/o move".** The
+[QDK neutral-atom model](https://github.com/microsoft/qdk/blob/313517959aec21d9f6a9ad420bf75684807e0b2a/source/qdk_package/qdk/qre/models/qubits/_neutral_atoms.py)
+defines `PHYSICAL_MOVE` as explicit atom transport with velocity, acceleration
+and handoff parameters. The
+[instruction definitions](https://github.com/microsoft/qdk/blob/313517959aec21d9f6a9ad420bf75684807e0b2a/source/qre/src/trace/instruction_ids.rs)
+give `SWAP` and `PHYSICAL_MOVE` different identities. Therefore the dashboard
+does **not** relabel this as "all routing/SWAP gates excluded", nor treat it as a
+full transport-inclusive operation total. The producing report's precise
+counter/filter was not supplied, so its exact exclusion cannot be independently
+verified from these screenshots. Counts alone do not establish execution time.
 
-Author under `src/`, then rebuild and commit the generated `index.html` too:
+No estimate dates, past snapshots, runtime models, targets, owners, maturity
+assessments, outlook commitments or hardware/correctness results were supplied.
+Those values are not fabricated. **23 September 2026 is the receipt date, not
+the estimate date.** Undated baseline records do not become points on an invented
+time axis. New engineering estimates require their actual as-of date.
+
+## Reading the dashboard
+
+- Overview places **Application candidate before System**. The grouped
+  selectors preserve the four system families and eight real applications.
+- The **Overview** selector switches between the selected application and
+  **Global overview - all applications**. Global overview uses one chart with
+  a Logical operations / Logical qubits metric selector, avoiding a mixed-scale
+  dual axis. Eight distinct colors, marker shapes, dash patterns and a labeled
+  key identify candidates. Checkboxes isolate series; keyboard/click Details
+  and an exact-data table also distinguish coincident points.
+- The initial global chart is explicitly an **undated baseline**, not a trend.
+  As dated records are saved privately, lines connect compatible dated records
+  only. Missing values, undated source records and changed configurations are
+  never silently interpolated.
+- **Application Roadmap and Progress** follows the supplied five-stage diagram:
+  specification, qubit fit, logical operations, correctness, and hardware
+  demonstration. Initial statuses describe the evidence supplied, not invented
+  completion percentages. A stage can be edited in Engineering > Roadmap.
+- Resource details & assumptions retains physical current/target counts, the
+  movement-excluded operation ratio, qubit overhead, timing/gate definitions,
+  source and the full note. Compare retains both eight-candidate scatter plots.
+- **Updates & outlook** starts empty rather than retaining fictional notes.
+  Engineers can create/edit/reorder/archive/restore up to four active briefing
+  bullets and manage milestones. Outlook uses **sprints or flexible planning
+  horizons**, not calendar deadlines. A linked target shares its value, basis
+  and planning window with Estimates; it is not copied into a second input.
+- Copy view link preserves the published candidate/snapshot, system filter,
+  tab and global metric mode. It never embeds private counts, notes, owners or
+  the database. A private estimate is explicitly replaced with a link to its
+  original supplied snapshot; it is not presented as publicly published data.
+
+## Private raw-input database
+
+GitHub Pages serves a read-only published snapshot. It does not host or expose
+the private database, and its engineering Save controls are disabled.
+
+Use the dependency-free local workspace for durable engineering entry:
+
+```powershell
+python .\resource-estimates\server.py `
+  --database "$env:LOCALAPPDATA\ResourceEstimates\engineering.sqlite" `
+  --port 8765
+```
+
+Open **http://127.0.0.1:8765/**, then choose Engineering.
+
+- The server binds to loopback only; the SQLite file must be outside the
+  repository/served directory. Do not place or commit a live database under
+  `resource-estimates/`.
+- Valid estimate batches, written updates, roadmap assessments and archive/
+  order actions are saved atomically with their raw submission. Count strings,
+  including scientific-notation or grouped input, are preserved separately
+  from normalized exact values. Original snapshots and earlier written
+  revisions remain in history.
+- **Engineering > Raw data** shows saved submissions and offers complete JSON
+  export and a consistent SQLite database download. Both are private local
+  endpoints. Back up the database; browser reload is not a reset.
+- Revision checks reject stale writes from a second tab rather than overwrite
+  another engineer's work. If a connection fails during Save, reload saved data
+  before retrying: an unconfirmed network response is not proof of rollback.
+- The seed is loaded once into a new database. Restarting does not replace
+  saved work with the source file, and "Reload saved data" never deletes history.
+
+This is a **single-computer private workspace**, not an Internet-facing shared
+team service. Loopback/Origin/token checks protect the browser boundary; they
+are not organizational sign-in, per-user authorization, disk encryption or
+protection against another process with access to the same local account.
+A shared multi-computer deployment needs approved hosting, authentication and
+backups; do not expose this server by changing its binding or adding a tunnel.
+The workspace navigation switch is not access control.
+
+Private saves do **not** automatically publish to GitHub. Public updates require
+an explicit review of which snapshot data may be released, followed by rebuilding
+the static artifact. Never copy a raw database export wholesale into the public
+source or attach private engineer submissions to a public issue.
+
+## Standalone build
+
+Author `src/shell.html`, `styles.css`, `app.js` and `data.json`, then run:
 
 ```powershell
 node .\resource-estimates\build.mjs
 node .\resource-estimates\build.mjs --check
 ```
 
-`src/shell.html`, `styles.css`, `data.js` and `app.js` are embedded into the single
-HTML file by the dependency-free Node build. No network runtime assets, framework,
-server, package install or new Pages workflow is required. The generated file
-also opens directly from disk. Do not hand-edit the generated `index.html`.
+Commit the generated `index.html` with its authoring changes. All browser runtime
+assets and the reviewed source snapshot are embedded; the HTML opens standalone
+from disk in read-only mode. No framework, package installation or new Pages
+workflow is required. The Python service serves this same artifact.
 
-## Bounded browser checks
+## Checks
 
-Use an existing Playwright installation and Edge. If Playwright is not resolvable
-from this repository, set `PLAYWRIGHT_MODULE` to its installed module directory.
-Optionally set `EDGE_PATH` to an existing Edge executable; otherwise the `msedge`
-channel is used. No browser profile or signed-in session is reused.
+Python database tests use only the standard library:
 
 ```powershell
-node .\resource-estimates\tests\smoke.cjs
+python -m unittest discover -s .\resource-estimates\tests -p test_database.py
 ```
 
-The checks cover fresh-context links and history, both plots' exact coordinates,
-atomic estimate edits, large/zero/missing/coincident counts, written CRUD and
-limits, linked targets, unsaved-navigation guards, and 320/390/768/1440px layouts.
-Overview checks enforce two number/change/chart pairs, a single chart explanation,
-closed secondary details, one relevant exception at most, fewer than 175 rendered
-default-content words, both complete desktop trends above 820px, and both mobile
-headlines within the first 844px. They also preserve full-note/caveat access,
-keyboard snapshot selection and the native forced-colors selector fallback.
-Set `REVIEW_ARTIFACTS` to a directory **outside this repository** and add `--visual`
-for desktop/mobile screenshots, Overview first-screen images, measured layout/
-default-text statistics and a JSON check summary. Word counts exclude closed
-disclosures, native option lists and non-rendered accessibility text.
-Set `DEMO_URL` to check a deployed copy instead of the local standalone artifact.
-Test edits are synthetic and remain inside disposable browser contexts.
+Browser checks reuse an existing Playwright installation and Edge. Set
+`PLAYWRIGHT_MODULE` to the installed Playwright module directory if it is not
+resolvable here; optionally set `EDGE_PATH` to the Edge executable.
 
-Publish only this subtree through the repository's existing main/root Pages
-source. The IEEE landing page, calendars, root configuration and Pages settings
-must remain unchanged.
+```powershell
+node .\resource-estimates\tests\smoke.cjs --private
+```
+
+The private browser checks start a disposable loopback server with a temporary
+database outside the repository, then remove only that test directory. They
+never write to the engineer's real database. Coverage includes all 56 supplied
+counts and real names, honest history, source qualifiers, links/back-forward,
+keyboard point details, distinct global series, exact raw-input persistence,
+atomic invalid saves, stale revisions, editor/history/limits, sprint targets,
+roadmap propagation, restart persistence and responsive layouts.
+
+Set `REVIEW_ARTIFACTS` to a directory outside the repository and add `--visual`
+for desktop/mobile screenshots and a JSON result report. Set `DASHBOARD_URL`
+to check a deployed read-only snapshot; omit `--private` for that pass.
+
+All repository changes and publication stay inside `resource-estimates/`.
+The IEEE landing page, calendars, root configuration and Pages settings must
+remain unchanged.

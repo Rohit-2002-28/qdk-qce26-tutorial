@@ -1,33 +1,45 @@
-(() => {
+(async () => {
   "use strict";
 
-  const DEMO = window.RESOURCE_DEMO;
-  const fields = DEMO.fields;
-  const routes = new Set(["overview", "compare", "metrics", "updates", "edit", "write", "guide"]);
-  const engineeringRoutes = new Set(["edit", "write", "guide"]);
+  const DATA = window.RESOURCE_DATA;
+  const fields = DATA.fields;
+  const routes = new Set(["overview", "compare", "metrics", "updates", "edit", "write", "roadmap", "records", "guide"]);
+  const engineeringRoutes = new Set(["edit", "write", "roadmap", "records", "guide"]);
   const main = document.getElementById("main");
   const dialog = document.getElementById("discard-dialog");
   const state = {
-    workloads: structuredClone(DEMO.workloads),
-    updates: structuredClone(DEMO.updates),
-    milestones: structuredClone(DEMO.milestones),
-    selected: "App 1a",
-    snapshot: "App 1a-2026-09-22-0",
+    workloads: structuredClone(DATA.workloads),
+    updates: structuredClone(DATA.updates),
+    milestones: structuredClone(DATA.milestones),
+    roadmap: structuredClone(DATA.roadmap),
+    selected: DATA.workloads[0].id,
+    snapshot: DATA.workloads[0].snapshots[0].id,
     filter: "all",
     view: "overview",
-    exact: false,
+    exact: true,
     ratios: false,
     history: false,
     draft: null,
     writtenDraft: null,
+    roadmapDraft: null,
     writePanel: "updates",
-    points: { qubits: "App 1a", operations: "App 1a" },
+    points: { qubits: DATA.workloads[0].id, operations: DATA.workloads[0].id },
+    overviewMode: "candidate",
+    globalMetric: "logicalOps",
+    globalHidden: new Set(),
+    globalPoint: null,
     hasLocalChanges: false,
     urlError: "",
     notice: "",
     noticeType: "success",
     guideHighlight: "",
     pendingAction: null
+  };
+  let metadata = DATA;
+  const storage = { connected: false, saving: false, revision: null, token: "", records: [], total: 0, error: "" };
+  const today = () => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   };
   let navigationIndex = 0;
   let navigationUrl = location.href;
@@ -39,34 +51,123 @@
   const isCount = value => value !== null && value !== undefined && /^\d+$/.test(String(value));
   const group = value => isCount(value) ? BigInt(value).toLocaleString("en-US") : "Not supplied";
   const dateValue = value => Date.parse(`${value}T12:00:00Z`);
-  const dateLabel = (value, short = false) => new Intl.DateTimeFormat("en-GB", {
+  const dateLabel = (value, short = false) => !value ? "Undated source snapshot" : new Intl.DateTimeFormat("en-GB", {
     day: "numeric", month: "short", ...(short ? {} : { year: "numeric" }), timeZone: "UTC"
   }).format(new Date(dateValue(value)));
   const announce = message => { document.getElementById("announcement").textContent = message; };
   const inputBadge = label => `<span class="input-badge">${escape(label)}</span>`;
   const inlineInfo = text => `<div class="inline-message">${infoIcon}<p>${text}</p></div>`;
   const workload = id => state.workloads.find(item => item.id === id);
-  const ordered = item => [...item.snapshots].sort((a, b) => a.asOf.localeCompare(b.asOf) || a.revision - b.revision);
+  const candidateName = id => workload(id)?.name || id;
+  const candidateLabel = item => `${item.id} - ${item.name}`;
+  const systemName = id => DATA.systems.find(system => system.id === Number(id))?.name || `System ${id}`;
+  const systemLabel = id => `System ${id} - ${systemName(id)}`;
+  const ordered = item => [...item.snapshots].sort((a, b) => (a.asOf || "").localeCompare(b.asOf || "") || a.revision - b.revision);
   const latest = item => ordered(item).at(-1);
   const selectedSnapshot = item => item.id === state.selected ? item.snapshots.find(row => row.id === state.snapshot) || latest(item) : latest(item);
-  const published = id => latest(DEMO.workloads.find(item => item.id === id));
+  const published = id => latest(DATA.workloads.find(item => item.id === id));
   const activeUpdates = () => state.updates.filter(update => !update.archived);
   const activeMilestones = () => state.milestones.filter(milestone => !milestone.archived);
-  const scopeLabel = scope => scope === "all" ? "All systems" : scope.startsWith("system:") ? `System ${scope.slice(7)}` : scope;
+  const scopeLabel = scope => scope === "all" ? "All systems" : scope.startsWith("system:") ? systemLabel(scope.slice(7)) : candidateName(scope);
   const appliesTo = (scope, item) => scope === "all" || scope === item.id || scope === `system:${item.system}`;
   const chartSnapshots = (item, selected = selectedSnapshot(item)) => {
     const byDate = new Map();
     for (const snapshot of ordered(item)) {
-      if (snapshot.asOf < selected.asOf || (snapshot.asOf === selected.asOf && snapshot.revision <= selected.revision)) {
-        byDate.set(snapshot.asOf, snapshot);
+      if ((!selected.asOf && !snapshot.asOf && snapshot.revision <= selected.revision) || (selected.asOf && snapshot.asOf && (snapshot.asOf < selected.asOf || (snapshot.asOf === selected.asOf && snapshot.revision <= selected.revision)))) {
+        byDate.set(snapshot.asOf || "undated", snapshot);
       }
     }
     return [...byDate.values()];
   };
   const previousComparable = item => {
     const selected = selectedSnapshot(item);
+    if (!selected.asOf) return undefined;
     return chartSnapshots(item).findLast(snapshot => snapshot.asOf < selected.asOf && snapshot.config === selected.config);
   };
+
+  const canonicalData = () => structuredClone({ ...metadata, workloads: state.workloads, updates: state.updates, milestones: state.milestones, roadmap: state.roadmap });
+
+  function applyStoredData(data) {
+    metadata = data;
+    for (const key of ["workloads", "updates", "milestones", "roadmap"]) state[key] = structuredClone(data[key]);
+    state.hasLocalChanges = state.workloads.some(item => item.snapshots.some(snapshot => snapshot.local))
+      || state.updates.some(record => record.local) || state.milestones.some(record => record.local)
+      || state.roadmap.some(stage => stage.revisions?.length);
+  }
+
+  async function apiResponse(response) {
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Database request failed (${response.status}).`);
+    return result;
+  }
+
+  async function refreshRecords() {
+    try {
+      const result = await apiResponse(await fetch("/api/records?limit=50", { cache: "no-store" }));
+      storage.records = result.records;
+      storage.total = result.total;
+      storage.error = "";
+    } catch (error) {
+      storage.error = `Could not read raw-input records: ${error.message}`;
+      announce(storage.error);
+    }
+  }
+
+  async function connectDatabase() {
+    if (location.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(location.hostname)) return;
+    main.innerHTML = '<p role="status">Opening the private engineering database...</p>';
+    try {
+      const result = await apiResponse(await fetch("/api/state", { cache: "no-store", signal: AbortSignal.timeout(6000) }));
+      if (!result.data || !Number.isInteger(result.revision) || !result.token) throw new Error("The local server returned an invalid database response.");
+      applyStoredData(result.data);
+      Object.assign(storage, { connected: true, revision: result.revision, token: result.token });
+      await refreshRecords();
+    } catch (error) {
+      storage.error = `Private database unavailable: ${error.message}. No engineering saves are enabled. Start the documented local workspace server.`;
+      state.notice = storage.error;
+      state.noticeType = "error";
+    }
+  }
+
+  async function persist(data, kind, raw) {
+    if (!storage.connected || storage.saving) {
+      state.notice = storage.saving ? "A database save is still in progress." : "Read-only snapshot. Start the private local workspace to save engineering data.";
+      state.noticeType = "error";
+      render();
+      return false;
+    }
+    storage.saving = true;
+    main.inert = true;
+    main.setAttribute("aria-busy", "true");
+    announce("Saving raw inputs and the revision to the private database.");
+    try {
+      const result = await apiResponse(await fetch("/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Resource-Token": storage.token },
+        body: JSON.stringify({ baseRevision: storage.revision, data, action: { kind, raw } })
+      }));
+      applyStoredData(result.data);
+      storage.revision = result.revision;
+      await refreshRecords();
+      return true;
+    } catch (error) {
+      state.notice = `Save not confirmed: ${error.message} Your draft remains open. Reload saved data before retrying if the connection failed or another window changed the database.`;
+      state.noticeType = "error";
+      render();
+      announce(state.notice);
+      return false;
+    } finally {
+      storage.saving = false;
+      main.inert = false;
+      main.removeAttribute("aria-busy");
+    }
+  }
+
+  function storageNotice() {
+    return storage.connected
+      ? inlineInfo("<strong>Private local workspace.</strong> Save writes exact inputs and retained revisions to SQLite on this computer. It does not publish them to GitHub Pages.")
+      : inlineInfo("<strong>Read-only published snapshot.</strong> Engineer saves require the private local workspace. No private database or write credential is exposed by this website.");
+  }
 
   function urlFor(view = state.view, options = {}) {
     const id = options.selected ?? state.selected;
@@ -80,38 +181,47 @@
     url.searchParams.set("snapshot", snapshot.id);
     url.searchParams.set("config", snapshot.config);
     url.searchParams.set("mode", engineeringRoutes.has(view) ? "engineering" : "leadership");
+    const overviewMode = options.overviewMode ?? state.overviewMode;
+    const globalMetric = options.globalMetric ?? state.globalMetric;
+    if (overviewMode === "global") {
+      url.searchParams.set("overview", "global");
+      url.searchParams.set("metric", globalMetric);
+    }
     url.hash = view;
     return url.href;
   }
 
   function candidateUrl(id, snapshot = latest(workload(id)), view = "overview") {
     const item = workload(id);
-    return urlFor(view, { selected: id, snapshot: snapshot.id, filter: state.filter === "all" ? "all" : String(item.system) });
+    return urlFor(view, { selected: id, snapshot: snapshot.id, filter: state.filter === "all" ? "all" : String(item.system), overviewMode: "candidate" });
   }
 
   function readLocation(url) {
     const address = new URL(url), params = address.searchParams;
     const view = address.hash.slice(1) || "overview";
-    const id = params.get("candidate") || "App 1a";
+    const id = params.get("candidate") || DATA.workloads[0].id;
     const item = workload(id);
     const filter = params.get("system") || "all";
     const requested = params.get("snapshot");
     const snapshot = item && (requested ? item.snapshots.find(row => row.id === requested) : latest(item));
-    const known = new Set(["candidate", "system", "snapshot", "config", "mode"]);
+    const overviewMode = params.get("overview") || "candidate";
+    const globalMetric = params.get("metric") || "logicalOps";
+    const known = new Set(["candidate", "system", "snapshot", "config", "mode", "overview", "metric"]);
     let error = "";
     if (!routes.has(view)) error = `The tab "${view}" is not available.`;
     else if ([...params.keys()].some(key => !known.has(key) || params.getAll(key).length > 1)) error = "This link has unknown or repeated view parameters.";
     else if ([...params.values()].some(value => !value.trim())) error = "This link includes an empty view parameter. Choose a published snapshot to recover.";
-    else if (!item) error = `The candidate "${id}" is not part of this published demo.`;
+    else if (!item) error = `The candidate "${id}" is not part of this dataset. Older placeholder links cannot be mapped to real applications.`;
     else if (!["all", "1", "2", "3", "4"].includes(filter)) error = `The system filter "${filter}" is not available.`;
     else if (filter !== "all" && String(item.system) !== filter) error = `${id} does not belong to System ${filter}.`;
-    else if (!snapshot) error = `The requested snapshot "${requested}" is unavailable. In-tab edits are not published server data and cannot be reopened after reload or in another tab.`;
+    else if (!snapshot) error = `The requested snapshot "${requested}" is unavailable here. A private database snapshot is not automatically part of the published website.`;
     else if (params.has("config") && params.get("config") !== snapshot.config) error = `This snapshot uses ${snapshot.config}, not the requested configuration "${params.get("config")}".`;
-    else if (params.has("mode") && params.get("mode") !== (engineeringRoutes.has(view) ? "engineering" : "leadership")) error = "The requested demo view does not match this tab.";
+    else if (!["candidate", "global"].includes(overviewMode) || !["logicalOps", "logicalQubits"].includes(globalMetric)) error = "The requested overview or metric is not supported.";
+    else if (params.has("mode") && params.get("mode") !== (engineeringRoutes.has(view) ? "engineering" : "leadership")) error = "The requested workspace does not match this tab.";
     return {
-      view: routes.has(view) ? view : "overview", selected: item ? id : "App 1a",
-      filter: error ? "all" : filter, snapshot: snapshot?.id || published(item ? id : "App 1a").id,
-      urlError: error
+      view: routes.has(view) ? view : "overview", selected: item ? id : DATA.workloads[0].id,
+      filter: error ? "all" : filter, snapshot: snapshot?.id || published(item ? id : DATA.workloads[0].id).id,
+      overviewMode, globalMetric, urlError: error
     };
   }
 
@@ -119,13 +229,13 @@
     if (workload(record.scope)) {
       const item = workload(record.scope);
       const snapshot = item.snapshots.find(row => row.id === record.snapshotId) || latest(item);
-      return `<a href="${escape(candidateUrl(item.id, snapshot))}" data-nav>${escape(item.id)}</a>`;
+      return `<a href="${escape(candidateUrl(item.id, snapshot))}" data-nav>${escape(candidateLabel(item))}</a>`;
     }
     return escape(scopeLabel(record.scope));
   }
 
   function unavailableView() {
-    return `<section class="sheet unavailable-view"><h1>This view is unavailable</h1><p role="alert">${escape(state.urlError)}</p><p>No substitute snapshot is being displayed as if it matched. Recover to the published example below.</p><a class="button primary" data-nav href="${escape(urlFor("overview", { snapshot: published(state.selected).id, filter: "all" }))}">Open published ${escape(state.selected)} snapshot</a></section>`;
+    return `<section class="sheet unavailable-view"><h1>This view is unavailable</h1><p role="alert">${escape(state.urlError)}</p><p>No substitute snapshot is being displayed as if it matched.</p><a class="button primary" data-nav href="${escape(urlFor("overview", { snapshot: published(state.selected).id, filter: "all", overviewMode: "candidate" }))}">Open supplied ${escape(candidateName(state.selected))} snapshot</a></section>`;
   }
 
   function compact(value) {
@@ -237,15 +347,17 @@
   }
 
   function freshness(snapshot) {
-    const days = Math.floor((dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000);
-    if (days < 0) return "Future-dated relative to the demo reference date";
+    if (!snapshot.asOf) return "Estimate date not supplied; freshness cannot be assessed";
+    const days = Math.floor((dateValue(today()) - dateValue(snapshot.asOf)) / 86400000);
+    if (days < 0) return "Future-dated relative to today";
     const cadence = Number(snapshot.context.cadenceDays);
     if (!snapshot.context.cadenceDays) return `${days} days old; reporting cadence not supplied`;
-    return days > cadence ? `${days} days old; past the illustrative ${cadence}-day cadence`
-      : `${days === 0 ? "Dated on the demo reference date" : `${days} days old`}; within the illustrative ${cadence}-day cadence`;
+    return days > cadence ? `${days} days old; past the ${cadence}-day cadence`
+      : `${days === 0 ? "Dated today" : `${days} days old`}; within the ${cadence}-day cadence`;
   }
 
   function nextExpected(snapshot) {
+    if (!snapshot.asOf) return "No next-update date can be derived from an undated snapshot.";
     if (!snapshot.context.cadenceDays) return "Next estimate date not supplied; no cadence set.";
     const due = new Date(dateValue(snapshot.asOf) + Number(snapshot.context.cadenceDays) * 86400000);
     if (!Number.isFinite(due.getTime())) return "Next estimate date is outside the supported date range.";
@@ -295,54 +407,51 @@
     const paths = groups.map(rows => `<path class="${rows[0].config === current.config ? "current-path" : "old-path"}" d="${rows.map((row, index) => `${index === 0 ? "M" : "L"}${x(row).toFixed(2)},${y(row).toFixed(2)}`).join(" ")}"/>`).join("");
     const points = snapshots.map(row => `<circle class="chart-point${row.config !== current.config ? " old-point" : ""}${row === current ? " selected-point" : ""}" cx="${x(row)}" cy="${y(row)}" r="${row === current ? 4.3 : 3}"><title>${dateLabel(row.asOf)}: ${group(row.metrics[key])}; ${escape(row.config)}</title></circle>`).join("");
     const dateTicks = snapshots.filter((_, index) => index === 0 || index === snapshots.length - 1 || (width > 390 && index === Math.floor(snapshots.length / 2)));
-    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${row === snapshots[0] ? "start" : row === lastAvailable ? "end" : "middle"}">${dateLabel(row.asOf, true)}</text>`).join("");
+    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${!row.asOf ? "middle" : row === snapshots[0] ? "start" : row === lastAvailable ? "end" : "middle"}">${row.asOf ? dateLabel(row.asOf, true) : "Undated baseline"}</text>`).join("");
     const chartId = `chart-${key}`;
-    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(item.id)}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} dated estimates. Latest available value ${group(lastAvailable.metrics[key])} on ${dateLabel(lastAvailable.asOf)}. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${grid}${boundaries}${paths}${points}${ticks}</svg>`;
+    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(candidateName(item.id))}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} supplied snapshots. Latest available value ${group(lastAvailable.metrics[key])}; ${dateLabel(lastAvailable.asOf)}. An undated baseline is not a historical time series. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${grid}${boundaries}${paths}${points}${ticks}</svg>`;
   }
 
   function provenance(snapshot) {
-    const savedAt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Los_Angeles" }).format(new Date(snapshot.savedAt));
+    const savedAt = snapshot.savedAt ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(new Date(snapshot.savedAt)) + " UTC" : "Source save timestamp not supplied";
     return `<section><h3>Assumptions &amp; source</h3><dl class="resource-facts">
         <div><dt>Configuration / caveat</dt><dd>${escape(snapshot.config)} &mdash; ${escape(snapshot.caveat)}</dd></div>
-        <div><dt>Estimate owner / source</dt><dd>${escape(snapshot.owner)} &middot; ${escape(snapshot.source)}</dd></div>
-        <div><dt>Saved at (not the estimate date)</dt><dd>${escape(savedAt)} PT</dd></div>
-        <div><dt>Reporting cadence</dt><dd>${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}. Relative to the ${dateLabel(DEMO.referenceDate)} demo date.</dd></div>
+        <div><dt>Estimate owner / source</dt><dd>${escape(snapshot.owner || "Owner not supplied")} &middot; ${escape(snapshot.source)}</dd></div>
+        <div><dt>Saved at (not the estimate date)</dt><dd>${escape(savedAt)}</dd></div>
+        <div><dt>Reporting cadence</dt><dd>${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}.</dd></div>
+        <div><dt>Source assumptions</dt><dd>${escape(DATA.assumptions.emulator)} ${escape(DATA.assumptions.correctness)}</dd></div>
+        <div><dt>Physical operations: w/o move</dt><dd>${escape(DATA.assumptions.interpretation)} ${DATA.assumptions.references.map(reference => `<a href="${escape(reference.url)}" target="_blank" rel="noopener noreferrer">${escape(reference.title)}</a>`).join(" / ")}</dd></div>
       </dl></section>`;
   }
 
   function requestMarkup(update, className = "request-note") {
     if (!update.requestKind) return "";
-    return `<p class="${className}"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)} &middot; ${update.requestDue ? `due ${dateLabel(update.requestDue)}` : "due date not supplied"}</p>`;
+    return `<p class="${className}"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)}${update.requestWindow ? ` &middot; ${escape(update.requestWindow)}` : ""}</p>`;
   }
 
   function milestoneTarget(milestone) {
     return milestone.targetCandidate ? latest(workload(milestone.targetCandidate)) : null;
   }
 
-  function milestoneDate(milestone) {
-    return milestoneTarget(milestone)?.context.targetDate || milestone.targetDate;
-  }
-
   function milestoneWindow(milestone) {
-    const date = milestoneDate(milestone);
-    if (!date) return "Target date not supplied";
-    return `${dateLabel(date)}${!milestone.targetCandidate && milestone.endDate ? ` to ${dateLabel(milestone.endDate)}` : ""}`;
+    return milestoneTarget(milestone)?.context.targetWindow || milestone.window || "Planning window not set";
   }
 
   function targetMarkup(snapshot, compactLine = false) {
     const context = snapshot.context, gap = targetGap(snapshot);
-    return `<span data-target-current="${escape(snapshot.metrics.physicalQubits)}"><strong>${compact(snapshot.metrics.physicalQubits)} physical qubits</strong> ${compactLine ? "now" : "in the selected snapshot"}</span> vs <strong>${context.targetPhysicalQubits ? compact(context.targetPhysicalQubits) : "no supplied"} target</strong>${context.targetDate ? ` by ${dateLabel(context.targetDate)}` : ""}. <span data-target-gap>${escape(gap.text)}; ${escape(gap.detail)}</span>`;
+    return `<span data-target-current="${escape(snapshot.metrics.physicalQubits)}"><strong>${compact(snapshot.metrics.physicalQubits)} physical qubits</strong> ${compactLine ? "in the latest snapshot" : "in the selected snapshot"}</span>${context.targetPhysicalQubits ? ` vs <strong>${compact(context.targetPhysicalQubits)} target</strong>${context.targetWindow ? ` &middot; ${escape(context.targetWindow)}` : ""}. <span data-target-gap>${escape(gap.text)}; ${escape(gap.detail)}</span>` : ". No physical-qubit target has been supplied."}`;
   }
 
   function overviewNotice(item, snapshot) {
-    if (!previousComparable(item)) return `<p class="overview-notice">No comparable earlier estimate on <strong>${escape(snapshot.config)}</strong>; cross-version changes are not compared.</p>`;
+    if (!snapshot.asOf) return "";
+    if (!previousComparable(item)) return `<p class="overview-notice">No comparable earlier dated estimate on <strong>${escape(snapshot.config)}</strong>; undated and cross-version records are not treated as time comparisons.</p>`;
     if (snapshot.id !== latest(item).id) return "";
     const blocker = activeUpdates().find(update => update.requestKind === "Blocker" && appliesTo(update.scope, item))
       || activeMilestones().find(milestone => milestone.status === "Blocked" && appliesTo(milestone.scope, item));
     if (blocker) return `<p class="overview-notice"><strong>Blocker recorded:</strong> ${escape(blocker.title)}. <a data-nav href="${escape(urlFor("updates"))}">Read blocker</a></p>`;
-    const days = Math.floor((dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000);
-    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) return `<p class="overview-notice"><strong>Update overdue:</strong> ${days} days old against a ${escape(snapshot.context.cadenceDays)}-day cadence, as of the ${dateLabel(DEMO.referenceDate, true)} demo date.</p>`;
-    if (days < 0) return '<p class="overview-notice">This estimate is future-dated relative to the demo reference date.</p>';
+    const days = Math.floor((dateValue(today()) - dateValue(snapshot.asOf)) / 86400000);
+    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) return `<p class="overview-notice"><strong>Update overdue:</strong> ${days} days old against a ${escape(snapshot.context.cadenceDays)}-day cadence.</p>`;
+    if (days < 0) return '<p class="overview-notice">This estimate is future-dated.</p>';
     return "";
   }
 
@@ -352,9 +461,9 @@
     const qubitRatio = ratio(snapshot.metrics.physicalQubits, snapshot.metrics.logicalQubits);
     return `<details class="resource-details" id="resource-details"><summary>Resource details &amp; assumptions</summary>
       <div class="resource-details-body"><div class="resource-detail-grid">
-        <section><h3>Physical resources &amp; target</h3><p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p><p>Engineer-set objective, not a forecast. Target basis: ${escape(snapshot.context.targetConfig || "not supplied")}.</p>
-          <dl class="resource-facts"><div><dt>Physical operations</dt><dd>${group(snapshot.metrics.physicalOps)}</dd></div></dl>
-          <p class="overhead"><span>Physical operations per logical operation</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong>${opRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalOps", "logicalOps")}</span>` : ""}</p>
+        <section><h3>Physical resources &amp; target</h3><p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p>${snapshot.context.targetPhysicalQubits ? `<p>Engineer-set objective, not a forecast. Target basis: ${escape(snapshot.context.targetConfig || "not supplied")}.</p>` : ""}
+          <dl class="resource-facts"><div><dt>Physical operations (w/o move)</dt><dd>${group(snapshot.metrics.physicalOps)}</dd></div></dl>
+          <p class="overhead"><span>Physical operations (w/o move) per logical operation</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong>${opRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalOps", "logicalOps")}</span>` : ""}</p>
           <p class="overhead"><span>Physical qubits per logical qubit</span><strong>${qubitRatio === null ? "Not available" : `${qubitRatio} : 1`}</strong>${qubitRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalQubits", "logicalQubits")}</span>` : ""}</p><p>Overhead ratios are not runtime speedups.</p>
         </section>
         <section><h3>Runtime &amp; gate share</h3><dl class="resource-facts">
@@ -370,6 +479,86 @@
       </div></details>`;
   }
 
+  const seriesStyles = [
+    { color: "#0057b8", dash: "", shape: "circle" }, { color: "#c54d00", dash: "9 4", shape: "square" },
+    { color: "#007347", dash: "3 3", shape: "triangle" }, { color: "#823eac", dash: "10 3 2 3", shape: "diamond" },
+    { color: "#956400", dash: "14 5", shape: "cross" }, { color: "#ab174d", dash: "2 5", shape: "plus" },
+    { color: "#007c88", dash: "8 3 3 3", shape: "hexagon" }, { color: "#333333", dash: "5 3", shape: "star" }
+  ];
+
+  function marker(shape, x, y, size = 5) {
+    if (shape === "circle") return `<circle cx="${x}" cy="${y}" r="${size}"/>`;
+    if (shape === "square") return `<rect x="${x - size}" y="${y - size}" width="${size * 2}" height="${size * 2}"/>`;
+    if (shape === "triangle") return `<path d="M${x},${y - size - 1}L${x + size + 1},${y + size}L${x - size - 1},${y + size}Z"/>`;
+    if (shape === "diamond") return `<path d="M${x},${y - size - 1}L${x + size + 1},${y}L${x},${y + size + 1}L${x - size - 1},${y}Z"/>`;
+    if (shape === "cross") return `<path fill="none" d="M${x - size},${y - size}L${x + size},${y + size}M${x - size},${y + size}L${x + size},${y - size}"/>`;
+    if (shape === "plus") return `<path fill="none" d="M${x - size - 1},${y}H${x + size + 1}M${x},${y - size - 1}V${y + size + 1}"/>`;
+    const count = shape === "star" ? 10 : 6;
+    const vertices = Array.from({ length: count }, (_, i) => {
+      const radius = shape === "star" && i % 2 ? size / 2 : size + 1;
+      return `${x + Math.cos(i * Math.PI * 2 / count - Math.PI / 2) * radius},${y + Math.sin(i * Math.PI * 2 / count - Math.PI / 2) * radius}`;
+    });
+    return `<polygon points="${vertices.join(" ")}"/>`;
+  }
+
+  function globalPointDetails(id, snapshotId) {
+    const item = workload(id);
+    const snapshot = item?.snapshots.find(row => row.id === snapshotId);
+    if (!item || !snapshot) return "Select a marker or a candidate's Details button for exact counts.";
+    return `<strong>${escape(candidateLabel(item))}</strong><p>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.config)}</p>
+      <p>Logical operations: <strong>${group(snapshot.metrics.logicalOps)}</strong> &middot; Logical qubits: <strong>${group(snapshot.metrics.logicalQubits)}</strong></p>
+      <a data-nav href="${escape(candidateUrl(id, snapshot))}">Open this application snapshot</a>`;
+  }
+
+  function globalOverview() {
+    const key = state.globalMetric;
+    const label = fields.find(field => field.key === key).label;
+    const hasDated = state.workloads.some(item => item.snapshots.some(snapshot => snapshot.asOf));
+    const series = state.workloads.map((item, index) => ({
+      item, style: seriesStyles[index],
+      rows: chartSnapshots(item, latest(item)).filter(row => hasDated ? Boolean(row.asOf) : !row.asOf)
+    }));
+    const shown = series.filter(row => !state.globalHidden.has(row.item.id));
+    const values = shown.flatMap(series => series.rows.filter(row => isCount(row.metrics[key])));
+    const width = Math.max(240, Math.floor(Math.min(contentWidth(), 1200) - (innerWidth <= 600 ? 34 : 50)));
+    const height = 280, left = 64, right = 26, top = 24, bottom = 45;
+    const max = values.reduce((value, row) => BigInt(row.metrics[key]) > value ? BigInt(row.metrics[key]) : value, 1n);
+    const magnitude = 10n ** BigInt(max.toString().length - 1);
+    const maximum = [1n, 2n, 3n, 4n, 5n, 6n, 8n, 10n].map(step => step * magnitude).find(value => value >= max);
+    const times = values.filter(row => row.asOf).map(row => dateValue(row.asOf));
+    const start = times.length ? Math.min(...times) : 0, end = times.length ? Math.max(...times) : 0;
+    const x = row => start === end ? (left + width - right) / 2 : left + (dateValue(row.asOf) - start) / (end - start) * (width - left - right);
+    const y = row => top + (1 - Number(BigInt(row.metrics[key]) * 1000000n / maximum) / 1000000) * (height - top - bottom);
+    const ticks = [...new Set([0n, maximum / 2n, maximum])].map(value => {
+      const cy = top + (1 - Number(value * 1000000n / maximum) / 1000000) * (height - top - bottom);
+      return `<line x1="${left}" x2="${width - right}" y1="${cy}" y2="${cy}" class="chart-grid"/><text x="${left - 8}" y="${cy + 4}" text-anchor="end">${compact(value)}</text>`;
+    }).join("");
+    const dateTicks = !hasDated || !times.length ? `<text x="${(left + width - right) / 2}" y="${height - 12}" text-anchor="middle">Undated baseline</text>`
+      : [...new Set([start, end])].map(time => `<text x="${start === end ? (left + width - right) / 2 : time === start ? left : width - right}" y="${height - 12}" text-anchor="${start === end ? "middle" : time === start ? "start" : "end"}">${dateLabel(new Date(time).toISOString().slice(0, 10), true)}</text>`).join("");
+    const plots = shown.map(({ item, rows, style }) => {
+      const groups = [];
+      for (const row of rows) {
+        if (!isCount(row.metrics[key])) { groups.push([]); continue; }
+        if (!groups.length || !groups.at(-1).length || groups.at(-1).at(-1).config !== row.config) groups.push([]);
+        groups.at(-1).push(row);
+      }
+      const paths = groups.filter(group => group.length > 1).map(group => `<path data-series="${item.id}" fill="none" stroke="${style.color}" stroke-width="2.5" stroke-dasharray="${style.dash}" d="${group.map((row, index) => `${index ? "L" : "M"}${x(row)},${y(row)}`).join(" ")}"/>`).join("");
+      return `${paths}${rows.filter(row => isCount(row.metrics[key])).map(row => `<g data-global-id="${item.id}" data-snapshot="${escape(row.id)}" data-value="${row.metrics[key]}" data-x="${x(row)}" data-y="${y(row)}" role="button" tabindex="0" aria-label="${escape(candidateLabel(item))}: ${group(row.metrics[key])} ${label.toLowerCase()}, ${dateLabel(row.asOf)}" stroke="${style.color}" fill="white" stroke-width="2.5"><circle class="point-hit" cx="${x(row)}" cy="${y(row)}" r="11" fill="transparent" stroke="none"/>${marker(style.shape, x(row), y(row))}</g>`).join("")}`;
+    }).join("");
+    const selected = state.globalPoint;
+    return `<section class="overview-surface global-overview" aria-labelledby="global-heading"><div class="global-heading"><div><h2 id="global-heading">${label} across all applications</h2><p>Independent candidates, not a combined total.</p></div><label class="field"><span>Metric</span><select id="global-metric" class="inset-select">${["logicalOps", "logicalQubits"].map(metric => `<option value="${metric}"${key === metric ? " selected" : ""}>${escape(fields.find(field => field.key === metric).label)}</option>`).join("")}</select></label></div>
+      <div class="global-chart-body">${values.length ? `<svg class="chart global-chart" data-global-chart="${key}" data-maximum="${maximum}" data-top="${top}" data-bottom="${bottom}" viewBox="0 0 ${width} ${height}" role="group" aria-label="${label} for all applications over supplied estimate dates">${ticks}${plots}${dateTicks}</svg>` : '<p class="chart-empty">No visible dated samples for this selection. Choose a candidate below, or show all candidates.</p>'}
+      <p class="comparison-caption">${hasDated ? "Lines connect dated estimates on the same basis only. Undated source records remain in the exact-data table; no dates are inferred." : "One undated source snapshot per application. These markers are a baseline, not a time trend. Add dated estimates in the private engineering workspace to build real history."} Coincident markers share their true positions; use the labeled key to isolate candidates.</p>
+      <div class="series-legend">${series.map(({ item, style, rows }) => `<div><label><input type="checkbox" data-global-visible="${item.id}"${state.globalHidden.has(item.id) ? "" : " checked"}><svg width="42" height="20" aria-hidden="true"><line x1="2" x2="40" y1="10" y2="10" stroke="${style.color}" stroke-width="2.5" stroke-dasharray="${style.dash}"/><g stroke="${style.color}" fill="white" stroke-width="2">${marker(style.shape, 21, 10, 4)}</g></svg><span>${escape(candidateLabel(item))}${hasDated && !rows.length ? ' <small>(undated)</small>' : ""}</span></label><button type="button" class="text-button" data-global-id="${item.id}" data-snapshot="${escape(latest(item).id)}" aria-label="Details for ${escape(item.name)}">Details</button></div>`).join("")}</div>
+      <button class="text-button" type="button" data-action="show-all-series">Show all candidates</button><div class="global-point-detail" id="global-point-detail" aria-live="polite">${globalPointDetails(selected?.id, selected?.snapshotId)}</div>
+      <details class="global-data"><summary>Exact source counts &amp; dated history</summary><div class="table-scroll" tabindex="0"><table class="data-table"><thead><tr><th scope="col">Application</th><th scope="col">Estimate date</th><th scope="col">Logical operations</th><th scope="col">Logical qubits</th><th scope="col">Configuration</th></tr></thead><tbody>${state.workloads.flatMap(item => ordered(item).map(row => `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${escape(candidateLabel(item))}</a></th><td>${dateLabel(row.asOf)}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${escape(row.config)}</td></tr>`)).join("")}</tbody></table></div></details>
+      </div></section>`;
+  }
+
+  function roadmapSummary() {
+    return `<section class="roadmap-panel" aria-labelledby="roadmap-heading"><h2 id="roadmap-heading">Application Roadmap and Progress</h2><ol class="roadmap-stages">${state.roadmap.map((stage, index) => `<li data-roadmap-stage="${stage.id}"><details><summary><span class="stage-number">${index + 1}</span><span class="stage-title">${escape(stage.title)}</span><span class="stage-status${stage.status === "Blocked" ? " blocked" : ""}">${escape(stage.status)}</span></summary><p>${escape(stage.note)}</p>${stage.owner ? `<p>Owner: ${escape(stage.owner)}</p>` : ""}${stage.window ? `<p>${escape(stage.window)}</p>` : ""}</details></li>`).join("")}</ol><p class="roadmap-caveat">Evidence availability is not a readiness or completion score. Clifford-rounded emulator runs do not establish correctness of the original circuits.</p></section>`;
+  }
+
   function overview() {
     const item = workload(state.selected), current = selectedSnapshot(item);
     const historical = current.id !== latest(item).id;
@@ -377,34 +566,36 @@
     const otherVersions = snapshots.some(snapshot => snapshot.config !== current.config);
     const missing = snapshots.some(snapshot => !isCount(snapshot.metrics.logicalOps) || !isCount(snapshot.metrics.logicalQubits));
     const explanation = [
-      "Changes compare the same configuration.",
+      current.asOf ? "Changes compare the same configuration." : "Estimate date not supplied. No historical change is inferred.",
       otherVersions ? "Gray: other assumptions; lines break between versions." : "",
       missing ? "Missing counts create gaps, not zeros." : "",
-      snapshots.length === 1 ? "One dated snapshot; another is needed for a trend." : ""
+      snapshots.length === 1 && current.asOf ? "One dated snapshot; another is needed for a trend." : ""
     ].filter(Boolean).join(" ");
     return `<div class="overview-page"><div class="overview-heading"><h1>Resource overview</h1>
-      <details class="snapshot-picker"><summary>Snapshot history</summary><div class="snapshot-options">
-        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / ${escape(snapshot.config)} / rev ${snapshot.revision + 1}${snapshot.local ? " / in-tab only" : ""}</option>`).join("")}</select></label>
+      <label class="field overview-mode"><span>Overview</span><select class="inset-select" id="overview-mode"><option value="candidate"${state.overviewMode === "candidate" ? " selected" : ""}>Selected application</option><option value="global"${state.overviewMode === "global" ? " selected" : ""}>Global overview - all applications</option></select></label>
+      ${state.overviewMode === "candidate" ? `<details class="snapshot-picker"><summary>Snapshot history</summary><div class="snapshot-options">
+        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / rev ${snapshot.revision + 1}${snapshot.local ? " / private database" : ""}</option>`).join("")}</select></label>
         <button type="button" class="text-button" data-action="history">View full revision history</button>
-      </div></details></div>
-      <div class="overview-selection"><div class="candidate-controls">
-        <label class="field"><span>System</span><select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${[1, 2, 3, 4].map(system => `<option value="${system}"${state.filter === String(system) ? " selected" : ""}>System ${system}</option>`).join("")}</select></label>
-        <label class="field"><span>Application candidate</span><select class="inset-select" id="candidate-select">${[1, 2, 3, 4].filter(system => state.filter === "all" || String(system) === state.filter).map(system => `<optgroup label="System ${system}">${state.workloads.filter(candidate => candidate.system === system).map(candidate => `<option value="${escape(candidate.id)}"${candidate.id === item.id ? " selected" : ""}>${escape(candidate.id)}</option>`).join("")}</optgroup>`).join("")}</select></label>
-      </div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}As of <strong>${dateLabel(current.asOf)}</strong> &middot; ${escape(current.maturity)} &middot; ${escape(current.config)}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; in-tab only" : ""}</p></div>
+      </div></details>` : ""}</div>
+      ${state.overviewMode === "global" ? globalOverview() : `<div class="overview-selection"><div class="candidate-controls">
+        <label class="field"><span>Application candidate</span><select class="inset-select" id="candidate-select">${DATA.systems.filter(system => state.filter === "all" || String(system.id) === state.filter).map(system => `<optgroup label="${escape(systemLabel(system.id))}">${state.workloads.filter(candidate => candidate.system === system.id).map(candidate => `<option value="${escape(candidate.id)}"${candidate.id === item.id ? " selected" : ""}>${escape(candidateLabel(candidate))}</option>`).join("")}</optgroup>`).join("")}</select></label>
+        <label class="field"><span>System</span><select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${DATA.systems.map(system => `<option value="${system.id}"${state.filter === String(system.id) ? " selected" : ""}>${escape(systemLabel(system.id))}</option>`).join("")}</select></label>
+      </div></div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}<strong>${escape(item.name)}</strong> &middot; ${current.asOf ? `As of ${dateLabel(current.asOf)}` : "Estimate date not supplied"}${current.maturity !== "Unspecified" ? ` &middot; ${escape(current.maturity)}` : ""}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; private database" : ""}</p>
       ${overviewNotice(item, current)}
-      <section class="overview-surface" id="selected-workload" aria-label="${escape(item.id)} logical resources">
+      <section class="overview-surface" id="selected-workload" aria-label="${escape(item.name)} logical resources">
         <div class="trend-grid">${[["logicalOps", "Logical operations"], ["logicalQubits", "Logical qubits"]].map(([key, label]) => `<section class="trend" aria-labelledby="${key}-heading"><h2 class="metric-label" id="${key}-heading">${label}</h2><div class="metric-value" data-metric="${key}" title="${group(current.metrics[key])}">${compact(current.metrics[key])}</div>${changeMarkup(item, key)}${chart(item, key, label)}</section>`).join("")}</div>
         <p class="chart-caption">${explanation}</p>
         <p class="snapshot-note"><strong>What changed:</strong> ${current.reason.length <= 160 ? escape(current.reason) : 'A longer engineering note is available. <button class="text-button" type="button" data-action="show-change-note">Read full note</button>'}</p>
         ${resourceDetails(item, current)}
-      </section></div>`;
+      </section>`}
+      ${roadmapSummary()}</div>`;
   }
 
   function historySection() {
     const item = workload(state.selected), current = selectedSnapshot(item);
-    return `<section class="sheet" id="snapshot-history"><div class="sheet-heading"><div><h2>${escape(item.id)} &mdash; snapshot history</h2><p>Every saved revision is retained. Charts use the latest revision for each estimate date.</p></div><div class="history-head">${state.history ? `<label class="field-inline">Workload<select id="history-workload">${state.workloads.map(row => `<option${row.id === item.id ? " selected" : ""}>${escape(row.id)}</option>`).join("")}</select></label>` : ""}<button type="button" class="button small" data-action="toggle-history" aria-expanded="${state.history}" aria-controls="history-content">${state.history ? "Hide" : "Show"} history</button></div></div>
+    return `<section class="sheet" id="snapshot-history"><div class="sheet-heading"><div><h2>${escape(candidateLabel(item))} &mdash; snapshot history</h2><p>Saved revisions are retained. Undated source records are not assigned artificial dates.</p></div><div class="history-head">${state.history ? `<label class="field-inline">Application<select id="history-workload">${state.workloads.map(row => `<option value="${row.id}"${row.id === item.id ? " selected" : ""}>${escape(candidateLabel(row))}</option>`).join("")}</select></label>` : ""}<button type="button" class="button small" data-action="toggle-history" aria-expanded="${state.history}" aria-controls="history-content">${state.history ? "Hide" : "Show"} history</button></div></div>
       <div id="history-content"${state.history ? "" : " hidden"}><div class="table-scroll"><table class="data-table history-table"><thead><tr><th scope="col">Estimate date</th><th scope="col">Assumptions</th><th scope="col">Logical operations</th><th scope="col">Logical qubits</th><th scope="col">Physical qubits</th><th scope="col">Runtime</th><th scope="col">Revision</th></tr></thead><tbody>
-        ${ordered(item).reverse().map(row => `<tr class="${row.id === current.id ? "is-current" : ""}"><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${dateLabel(row.asOf)}</a>${row.id === current.id ? '<span class="workload-date">Selected snapshot</span>' : ""}${row.local ? '<span class="workload-date">In-tab only</span>' : ""}</th><td><span class="basis-tag">${escape(row.config)}</span>${row.config !== current.config ? '<span class="workload-date">Different assumptions</span>' : ""}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${group(row.metrics.physicalQubits)}</td><td>${row.context.runtimeHours ? `${escape(row.context.runtimeHours)} h` : "Not supplied"}</td><td>${row.revision + 1}</td></tr>`).join("")}
+        ${ordered(item).reverse().map(row => `<tr class="${row.id === current.id ? "is-current" : ""}"><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${dateLabel(row.asOf)}</a>${row.id === current.id ? '<span class="workload-date">Selected snapshot</span>' : ""}${row.local ? '<span class="workload-date">Private database</span>' : ""}</th><td><span class="basis-tag">${escape(row.config)}</span>${row.config !== current.config ? '<span class="workload-date">Different assumptions</span>' : ""}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${group(row.metrics.physicalQubits)}</td><td>${row.context.runtimeHours ? `${escape(row.context.runtimeHours)} h` : "Not supplied"}</td><td>${row.revision + 1}</td></tr>`).join("")}
       </tbody></table></div><div class="table-foot"><p>Estimate date is not the save timestamp. Corrections do not erase prior revisions.</p><p>Comparison basis: ${escape(current.config)}</p></div></div></section>`;
   }
 
@@ -417,23 +608,25 @@
         const value = ratio(current.metrics[key], current.metrics[index === 0 ? "logicalQubits" : "logicalOps"]);
         return `<td>${value === null ? "Not available" : `${value} : 1`}</td>`;
       }).join("") : "";
-      return `<tr><th scope="row" class="frozen"><a class="workload-button" data-nav href="${escape(candidateUrl(item.id, current))}">${escape(item.id)}</a><span class="workload-date">${dateLabel(current.asOf)}</span></th>${fields.map(field => `<td title="${group(current.metrics[field.key])}">${display(current.metrics[field.key])}</td>`).join("")}${ratios}</tr>`;
+      return `<tr><th scope="row" class="frozen"><a class="workload-button" data-nav href="${escape(candidateUrl(item.id, current))}">${escape(candidateLabel(item))}</a><span class="workload-date">${dateLabel(current.asOf)}</span></th>${fields.map(field => `<td title="${group(current.metrics[field.key])}">${display(current.metrics[field.key])}</td>`).join("")}${ratios}</tr>`;
     }).join("");
     const contextRows = state.workloads.map(item => {
       const current = latest(item), share = gateShare(current), gap = targetGap(current);
-      return `<tr><th scope="row" class="frozen">${escape(item.id)}</th><td>${escape(current.context.runtimeHours || "Not supplied")}${current.context.runtimeHours ? " h" : ""}<small>Engineer-supplied model</small></td><td>${current.context.targetPhysicalQubits ? compact(current.context.targetPhysicalQubits) : "Not supplied"}<small>${current.context.targetDate ? dateLabel(current.context.targetDate) : "No target date"}</small></td><td>${escape(gap.text)}<small>${gap.available ? escape(gap.detail) : "Needs engineering input"}</small></td><td>${share.text}<small>${current.context.gateBasisConfirmed ? "Classified logical gates" : "Confirm the gate basis"}</small></td><td>${escape(current.source)}<small>${escape(current.owner)}</small></td></tr>`;
+      return `<tr><th scope="row" class="frozen"><span class="workload-button">${escape(candidateLabel(item))}</span></th><td>${escape(current.context.runtimeHours || "Not supplied")}${current.context.runtimeHours ? " h" : ""}</td><td>${current.context.targetPhysicalQubits ? `${compact(current.context.targetPhysicalQubits)} physical qubits<small>Current: ${compact(current.metrics.physicalQubits)} physical qubits</small>` : "Not supplied"}<small>${escape(current.context.targetWindow || "")}</small></td><td>${escape(gap.text)}<small>${gap.available ? escape(gap.detail) : "Needs engineering input"}</small></td><td>${share.text}<small>${current.context.gateBasisConfirmed ? "Classified logical gates" : "Confirm the gate basis"}</small></td><td>${escape(current.source)}<small>${escape(current.owner || "Owner not supplied")}</small></td></tr>`;
     }).join("");
-    return `<div class="page-heading"><div><h1>All resource metrics</h1><p>Eight independent candidates. One dated snapshot per row. No aggregate totals.</p></div></div>
+    return `<div class="page-heading"><div><h1>All resource metrics</h1><p>Eight independent applications. Latest supplied snapshot per row; no aggregate totals.</p></div></div>
+      ${inlineInfo(`${escape(DATA.assumptions.emulator)} Physical operations retain the source's <strong>w/o move</strong> exclusion.`)}
       <section class="sheet"><div class="sheet-heading"><div><h2>Latest estimates</h2><p>All seven engineering counts, kept together.</p></div><div class="table-tools"><label class="check-label"><input type="checkbox" id="exact-values"${state.exact ? " checked" : ""}>Exact counts</label><label class="check-label"><input type="checkbox" id="show-ratios"${state.ratios ? " checked" : ""}>Show overhead ratios</label></div></div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Latest estimates; scroll horizontally for more columns"><table class="data-table" id="all-metrics-table"><thead><tr class="column-group"><th class="frozen" rowspan="2" scope="col">Workload /<br>estimate date</th><th colspan="5" scope="colgroup">Operations</th><th colspan="2" scope="colgroup">Qubits</th>${state.ratios ? '<th colspan="2" scope="colgroup">Physical per logical</th>' : ""}</tr><tr>${header}${state.ratios ? '<th scope="col">Qubit overhead</th><th scope="col">Operation overhead</th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>
       <div class="table-foot"><p>${state.exact ? "Exact whole-number counts." : "K = thousand; M = million; B = billion; T = trillion. Toggle Exact counts for full values."}</p><p>Select a workload to open its overview.</p></div></section>
       <section class="sheet"><div class="sheet-heading"><div><h2>Supporting measures</h2><p>Runtime is an engineer-supplied model input, not inferred from counts.</p></div></div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Supporting measures; scroll horizontally for more columns"><table class="data-table secondary-table"><thead><tr><th scope="col" class="frozen">Workload</th><th scope="col">Estimated runtime</th><th scope="col">Physical-qubit target</th><th scope="col">Gap to target</th><th scope="col">Non-Clifford share</th><th scope="col">Source / owner</th></tr></thead><tbody>${contextRows}</tbody></table></div>
-      <div class="table-foot"><p>All targets and runtime estimates are dummy engineering inputs. Gaps and gate shares are calculated.</p><p>Gate share uses the three classified gate categories, not an unverified operation total.</p></div></section>
+      <div class="table-foot"><p>No targets or timing models are inferred from the supplied counts.</p><p>Gate share requires a confirmed classification basis.</p></div></section>
       ${historySection()}
       <section class="sheet"><details class="definitions"><summary>Metric definitions and interpretation</summary><dl>
         <dt>Logical / physical operations</dt><dd>Counts at different implementation levels. Engineering must define which gate, reset, measurement, and correction operations are included. Their ratio is not a speedup.</dd>
-        <dt>Gate categories</dt><dd>This demo assumes non-overlapping logical gate categories. Real gate-share calculations require a confirmed common basis and denominator. Do not assume gate counts necessarily sum to all logical operations.</dd>
+        <dt>Physical operations (w/o move)</dt><dd>${escape(DATA.assumptions.physicalOperations)} ${escape(DATA.assumptions.interpretation)}</dd>
+        <dt>Gate categories</dt><dd>The source categories numerically sum to logical operations. A gate-share calculation still requires engineering to confirm a common non-overlapping basis. Emulator Clifford rounding does not remove the original circuit counts from this table.</dd>
         <dt>Logical / physical qubits</dt><dd>The supplied resource counts for the workload. Engineering must confirm whether physical qubits include all ancillas, factories, and other overhead, and whether the count is peak simultaneous demand.</dd>
         <dt>Estimated runtime</dt><dd>A separate engineering estimate based on timing, scheduling, parallelism, and the relevant hardware/error-correction configuration. It is not calculated from gate count alone.</dd>
         <dt>Targets and gaps</dt><dd>A target is an engineer-supplied future objective, not a forecast. A gap is shown only when target and current estimate use the same assumptions version.</dd>
@@ -442,14 +635,14 @@
 
   const plotFields = {
     qubits: { x: "logicalQubits", y: "physicalQubits", xLabel: "Logical qubits", yLabel: "Physical qubits", title: "Qubit requirements" },
-    operations: { x: "logicalOps", y: "physicalOps", xLabel: "Logical operations", yLabel: "Physical operations", title: "Operation requirements" }
+    operations: { x: "logicalOps", y: "physicalOps", xLabel: "Logical operations", yLabel: "Physical ops (w/o move)", title: "Operation requirements" }
   };
 
   function pointDetails(kind, id) {
     const item = workload(id), snapshot = latest(item), axes = plotFields[kind];
     const available = isCount(snapshot.metrics[axes.x]) && isCount(snapshot.metrics[axes.y]);
-    return `<strong>${escape(id)}</strong> &middot; System ${item.system}
-      <p>As of ${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.config)} &middot; ${escape(snapshot.maturity)}${snapshot.local ? " &middot; in-tab only" : ""}</p>
+    return `<strong>${escape(candidateLabel(item))}</strong><p>${escape(systemLabel(item.system))}</p>
+      <p>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.config)}${snapshot.maturity !== "Unspecified" ? ` &middot; ${escape(snapshot.maturity)}` : ""}${snapshot.local ? " &middot; private database" : ""}</p>
       <dl><div><dt>${axes.xLabel}</dt><dd data-exact-x>${group(snapshot.metrics[axes.x])}</dd></div><div><dt>${axes.yLabel}</dt><dd data-exact-y>${group(snapshot.metrics[axes.y])}</dd></div></dl>
       ${available ? "" : "<p>Not plotted: both counts are required. Missing values are not treated as zero.</p>"}
       <a data-nav href="${escape(candidateUrl(id, snapshot))}">Open this candidate / snapshot</a>`;
@@ -495,28 +688,28 @@
     const points = plotted.map(({ item, snapshot }) => {
       const cx = x(snapshot.metrics[axes.x]), cy = y(snapshot.metrics[axes.y]);
       const label = labelPosition(cx, cy);
-      const code = item.id.replace("App ", "");
+      const code = item.id;
       if (label) leaders.push(`<line class="point-leader" x1="${cx}" y1="${cy}" x2="${label.x + 13}" y2="${label.y + 10}" pointer-events="none"/>`);
-      return `<g role="button" tabindex="0" data-point="${escape(item.id)}" data-plot="${kind}" data-x="${snapshot.metrics[axes.x]}" data-y="${snapshot.metrics[axes.y]}" data-cx="${cx}" data-cy="${cy}" aria-pressed="${state.points[kind] === item.id}" aria-label="${escape(item.id)}: ${group(snapshot.metrics[axes.x])} ${axes.xLabel.toLowerCase()}, ${group(snapshot.metrics[axes.y])} ${axes.yLabel.toLowerCase()}; ${dateLabel(snapshot.asOf)}; ${escape(snapshot.config)}. Show details.">
+      return `<g role="button" tabindex="0" data-point="${escape(item.id)}" data-plot="${kind}" data-x="${snapshot.metrics[axes.x]}" data-y="${snapshot.metrics[axes.y]}" data-cx="${cx}" data-cy="${cy}" aria-pressed="${state.points[kind] === item.id}" aria-label="${escape(candidateLabel(item))}: ${group(snapshot.metrics[axes.x])} ${axes.xLabel.toLowerCase()}, ${group(snapshot.metrics[axes.y])} ${axes.yLabel.toLowerCase()}; ${dateLabel(snapshot.asOf)}; ${escape(snapshot.config)}. Show details.">
         ${label ? `<rect class="point-label" x="${label.x}" y="${label.y}" width="27" height="21"/><text class="point-code" x="${label.x + 13.5}" y="${label.y + 15}" text-anchor="middle">${escape(code)}</text>` : ""}
         <circle class="marker-point" cx="${cx}" cy="${cy}" r="4.5"/></g>`;
     }).join("");
-    return `<section class="sheet scatter-sheet" aria-labelledby="${kind}-title"><div class="sheet-heading"><div><h2 id="${kind}-title">${axes.title}</h2><p>Latest dated estimate per candidate &middot; linear count axes</p></div></div><div class="scatter-body">
+    return `<section class="sheet scatter-sheet" aria-labelledby="${kind}-title"><div class="sheet-heading"><div><h2 id="${kind}-title">${axes.title}</h2><p>Latest supplied estimate per candidate &middot; linear count axes</p></div></div><div class="scatter-body">
       <svg class="scatter" viewBox="0 0 ${width} ${height}" data-scatter="${kind}" data-x-max="${xMax}" data-y-max="${yMax}" data-left="${left}" data-top="${top}" data-right="${right}" data-bottom="${bottom}" role="group" aria-labelledby="${kind}-title" aria-describedby="${kind}-help"><text class="axis-label" x="${left}" y="17">${axes.yLabel} (count)</text>${xTicks}${yTicks}${leaders.join("")}${points}<text class="axis-label" x="${(width + left - right) / 2}" y="${height - 9}" text-anchor="middle">${axes.xLabel} (count)</text></svg>
       <p class="comparison-caption" id="${kind}-help">Select a labeled point, or choose a candidate below. Leaders label the true plotted position; coincident points remain individually selectable.</p>
-      <div class="point-picker" aria-label="${axes.title}: choose a candidate">${rows.map(({ item }) => `<button type="button" data-point="${escape(item.id)}" data-plot="${kind}" aria-pressed="${state.points[kind] === item.id}">${escape(item.id)}</button>`).join("")}</div>
+      <div class="point-picker" aria-label="${axes.title}: choose a candidate">${rows.map(({ item }) => `<button type="button" data-point="${escape(item.id)}" data-plot="${kind}" aria-pressed="${state.points[kind] === item.id}" title="${escape(item.name)}">${escape(item.id)} &middot; ${escape(item.shortName)}</button>`).join("")}</div>
       <div class="point-detail" id="point-detail-${kind}" aria-live="polite">${pointDetails(kind, state.points[kind])}</div>
       ${plotted.length < rows.length ? `<p class="comparison-caption">${rows.length - plotted.length} candidate(s) have missing counts and are not plotted. See exact data below.</p>` : ""}
       </div></section>`;
   }
 
   function compare() {
-    return `<div class="page-heading"><div><h1>Compare resource requirements</h1><p>All eight independent candidates. Each point uses its own latest dated estimate, regardless of the Overview filter.</p></div></div>
-      ${inlineInfo("Different workloads and configurations are not necessarily like-for-like. Lower-left is not a performance ranking. No totals, fitted trend line, or runtime inference. K = thousand; M = million; B = billion.")}
+    return `<div class="page-heading"><div><h1>Compare resource requirements</h1><p>All eight applications. Each point uses its latest supplied snapshot, regardless of the Overview filter.</p></div></div>
+      ${inlineInfo("Different applications and configurations are not necessarily like-for-like. Physical operation counts are <strong>w/o move</strong>, not full transport-inclusive totals. Lower-left is not a performance ranking.")}
       <div class="compare-grid">${scatter("qubits")}${scatter("operations")}</div>
       <section class="sheet"><details class="definitions"><summary>Exact plot data, dates &amp; configurations (8 candidates)</summary>
-      <div class="table-scroll" tabindex="0" role="region" aria-label="Exact plot counts; scroll for all columns"><table class="data-table compare-table" id="compare-data"><thead><tr><th scope="col">Candidate / date</th><th scope="col">Configuration</th><th scope="col">Logical qubits</th><th scope="col">Physical qubits</th><th scope="col">Logical operations</th><th scope="col">Physical operations</th></tr></thead><tbody>
-      ${state.workloads.map(item => { const snapshot = latest(item); return `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, snapshot))}">${escape(item.id)}</a><span class="workload-date">${dateLabel(snapshot.asOf)}${snapshot.local ? " / in-tab only" : ""}</span></th><td>${escape(snapshot.config)}</td>${["logicalQubits", "physicalQubits", "logicalOps", "physicalOps"].map(key => `<td>${group(snapshot.metrics[key])}</td>`).join("")}</tr>`; }).join("")}
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Exact plot counts; scroll for all columns"><table class="data-table compare-table" id="compare-data"><thead><tr><th scope="col">Application / date</th><th scope="col">Configuration</th><th scope="col">Logical qubits</th><th scope="col">Physical qubits</th><th scope="col">Logical operations</th><th scope="col">Physical ops (w/o move)</th></tr></thead><tbody>
+      ${state.workloads.map(item => { const snapshot = latest(item); return `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, snapshot))}">${escape(candidateLabel(item))}</a><span class="workload-date">${dateLabel(snapshot.asOf)}${snapshot.local ? " / private database" : ""}</span></th><td>${escape(snapshot.config)}</td>${["logicalQubits", "physicalQubits", "logicalOps", "physicalOps"].map(key => `<td>${group(snapshot.metrics[key])}</td>`).join("")}</tr>`; }).join("")}
       </tbody></table></div><p class="support-caption">Counts remain exact integers. Plot coordinates and tick labels are rounded for display only. A zero is plotted at zero; an absent count is explicitly omitted, never imputed.</p></details></section>`;
   }
 
@@ -549,14 +742,14 @@
   }
 
   function updates() {
-    return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>A short account of what changed, followed by what the team is working toward.</p></div><span class="count-label">Example reporting date: 22 Sep 2026</span></div>
+    return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>Recorded updates and sprint-based plans. Planning windows are not calendar commitments.</p></div></div>
       <div class="updates-layout">
         <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
-          <ul class="update-list">${activeUpdates().map(update => `<li data-update-id="${escape(update.id)}"><div class="update-meta">${scopeLink(update)}<span>&middot; ${dateLabel(update.date)} &middot; ${escape(update.owner)}</span></div><h3>${escape(update.title)}</h3><p class="written-prose">${escape(update.body)}</p>${requestMarkup(update)}</li>`).join("") || '<li>No active bullets. Earlier updates remain in history below.</li>'}</ul>
+          <ul class="update-list">${activeUpdates().map(update => `<li data-update-id="${escape(update.id)}"><div class="update-meta">${scopeLink(update)}<span>&middot; ${dateLabel(update.date)} &middot; ${escape(update.owner)}</span></div><h3>${escape(update.title)}</h3><p class="written-prose">${escape(update.body)}</p>${requestMarkup(update)}</li>`).join("") || '<li>No written updates have been supplied.</li>'}</ul>
         </section>
         <section class="sheet"><div class="sheet-heading"><div><h2>What comes next</h2><p>Plans and targets &mdash; not completed results.</p></div></div>
           <ol class="milestones">
-            ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-date"><strong>${milestoneDate(milestone) ? dateLabel(milestoneDate(milestone), true) : "TBD"}</strong><span>${milestoneDate(milestone)?.slice(0, 4) || "Date needed"}</span></div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p><p>${escape(milestoneWindow(milestone))}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(milestone.targetCandidate)} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No active milestones. Earlier plans remain in history below.</li>'}
+            ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-window">${escape(milestoneWindow(milestone))}</div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(candidateName(milestone.targetCandidate))} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No outlook milestones have been supplied. Engineers can add sprint-based plans in the private workspace.</li>'}
           </ol>
           <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked targets use the candidate's latest estimate record; a snapshot link does not pin these written plans.</div>
         </section>
@@ -568,17 +761,17 @@
     const rows = [
       ["comparisons", "Change from the previous comparable estimate", "Dated counts, an assumptions/configuration version, and confirmation that snapshots are comparable.", "Count and percentage change. The comparison date is shown. No percentage when the previous denominator is zero or no compatible snapshot exists.", "Under each primary metric", "Calculated"],
       ["reasons", "Why the estimate changed", "A short explanation, implication, any caveat, and an owner. Reuse the estimate note in the written editor; curate up to four active briefing bullets.", "Nothing is inferred from the counts. The snapshot note stays with Overview; the canonical briefing lives in Updates & outlook.", "Snapshot note + written updates", "Engineer input"],
-      ["freshness", "Freshness and provenance", "Estimate date, maturity (Provisional or Reviewed), reporting cadence, owner, and source/run reference. Cadence and maturity are descriptive inputs, not approvals or inferred confidence.", "Age against the fixed demo reference date and a cadence exception. Save timestamp is recorded separately.", "Every row + source disclosure", "Input + calculation"],
-      ["targets", "Target and gap to target", "Target metric/value, target date, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Resource details + outlook", "Input + calculation"],
+      ["freshness", "Freshness and provenance", "Estimate date, maturity (Unspecified, Provisional or Reviewed), optional reporting cadence, owner, and source/run reference. These are supplied inputs, not inferred confidence.", "Age is assessed only for dated records. Save timestamp is recorded separately; source receipt is never substituted for estimate date.", "Every row + source disclosure", "Input + calculation"],
+      ["targets", "Target and gap to target", "Target metric/value, sprint or flexible horizon, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Resource details + outlook", "Input + calculation"],
       ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Resource details + All metrics", "Engineer input"],
       ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Resource details + All metrics", "Definition + calculation"]
     ];
     return `<div class="page-heading"><div><h1>What engineers need to provide</h1><p>One clear contract between the entry table and the leadership view.</p></div><a href="#edit" data-route="edit" class="button">Open entry table &rarr;</a></div>
-      ${inlineInfo("<strong>Synthetic examples only.</strong> Do not enter real data in this public demo. A realistic-looking number is not evidence, and the demo-view switch is not access control.")}
+      ${inlineInfo(`<strong>Source limits.</strong> ${escape(DATA.assumptions.emulator)} ${escape(DATA.assumptions.interpretation)}`)}
       <section class="sheet"><div class="sheet-heading"><div><h2>Additional information: input or calculation?</h2><p>All six additions are included. Derived values are never typed manually.</p></div></div><div class="table-scroll" tabindex="0" role="region" aria-label="Engineering input requirements; scroll horizontally for more columns"><table class="data-table guide-table"><thead><tr><th scope="col">Information</th><th scope="col">Engineers supply</th><th scope="col">Dashboard calculates / displays</th><th scope="col">Where it appears</th></tr></thead><tbody>${rows.map(([id, title, supply, derive, where, type]) => `<tr id="guide-${id}" class="${state.guideHighlight === id ? "guide-highlight" : ""}"><th scope="row"><span class="guide-title">${escape(title)}</span>${inputBadge(type)}</th><td>${escape(supply)}</td><td>${escape(derive)}</td><td>${escape(where)}</td></tr>`).join("")}</tbody></table></div></section>
       <div class="guide-grid"><section class="sheet"><h2>The seven source counts stay unchanged</h2><p>Logical operations, physical operations, non-Clifford gates, 1-qubit Clifford, 2-qubit Clifford, logical qubits, and physical qubits. The input table accepts exact whole numbers and Excel paste. Both physical-to-logical overhead ratios are calculated from the same dated snapshot.</p></section><section class="sheet"><h2>Small amount of context, large reduction in questions</h2><p>For each saved update: confirm its date, write one change note, and review the relevant assumptions and source. Targets and timing models live in the expandable context section so they do not crowd routine count entry.</p></section></div>
-      <div class="full-row-note"><p><strong>One place for written context.</strong><br>Use Engineering &gt; Updates &amp; outlook for briefing bullets, explicit requests and milestones. Counts and targets stay in Estimates. Save applies immediately in this tab only.</p><a data-nav class="button" href="${escape(urlFor("write"))}">Open written editor</a></div>
-      <div class="full-row-note"><p><strong>Production permissions are a separate requirement.</strong><br>Microsoft Entra ID, explicit viewer/editor assignments, server-side authorization, durable history, and conflict handling still need implementation. This mockup implements none of those security guarantees.</p></div>`;
+      <div class="full-row-note"><p><strong>One place for written context.</strong><br>Use Engineering &gt; Updates &amp; outlook for briefing bullets and sprint-based milestones. Counts and shared targets stay in Estimates.</p><a data-nav class="button" href="${escape(urlFor("write"))}">Open written editor</a></div>
+      <div class="full-row-note"><p><strong>Private database, public snapshot.</strong><br>The local workspace saves raw submissions and retained history to SQLite on this computer. Public Pages is read-only. The Leadership/Engineering switch is navigation, not authentication; a shared team service would need separate hosting and identity controls.</p></div>`;
   }
 
   function scopeOptions(value) {
@@ -596,10 +789,10 @@
     const record = id ? state[kind].find(item => item.id === id) : null;
     const snapshot = latest(workload(state.selected));
     const values = record ? structuredClone(record) : kind === "updates" ? {
-      scope: state.selected, title: "", body: snapshot.reason, date: snapshot.asOf, owner: snapshot.owner,
-      snapshotId: snapshot.id, requestKind: "", request: "", requestOwner: "", requestDue: ""
+      scope: state.selected, title: "", body: snapshot.reason, date: snapshot.asOf || "", owner: snapshot.owner,
+      snapshotId: snapshot.id, requestKind: "", request: "", requestOwner: "", requestWindow: ""
     } : {
-      scope: state.selected, title: "", outcome: "", targetDate: "", endDate: "", owner: snapshot.owner,
+      scope: state.selected, title: "", outcome: "", window: "", owner: snapshot.owner,
       status: "Planned", dependencies: "", targetCandidate: ""
     };
     state.writePanel = kind;
@@ -610,14 +803,14 @@
   }
 
   function linkedTargetPreview(values) {
-    if (!values.targetCandidate) return "Optional. Linking uses the estimate's target value, date and assumptions; there is no second numeric target to maintain here.";
+    if (!values.targetCandidate) return "Optional. Linking uses the estimate's target value, planning window and assumptions; there is no second numeric target to maintain.";
     const snapshot = latest(workload(values.targetCandidate));
-    return `${compact(snapshot.context.targetPhysicalQubits)} physical-qubit objective; ${snapshot.context.targetDate ? dateLabel(snapshot.context.targetDate) : "date not supplied"}; ${escape(snapshot.context.targetConfig || "basis not supplied")}. Edit this shared target in Estimates.`;
+    return `${compact(snapshot.context.targetPhysicalQubits)} physical-qubit objective; ${escape(snapshot.context.targetWindow || "planning window not set")}; ${escape(snapshot.context.targetConfig || "basis not supplied")}. Edit this shared target in Estimates.`;
   }
 
   function writtenForm() {
     const draft = state.writtenDraft;
-    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Keep one item open at a time. Briefing bullets and milestones appear in the leadership Updates &amp; outlook tab. Older versions stay in history.</p><p>All saves change this open page only. Reloading restores the published synthetic examples.</p></section>`;
+    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Briefing bullets and milestones appear in Updates &amp; outlook. Saves in the private workspace retain raw input and earlier versions in SQLite.</p></section>`;
     const { kind, values } = draft;
     const field = (key, label, options = {}) => `<label class="field${options.wide ? " wide" : ""}"><span>${label}${options.required ? ' <span class="required">Required</span>' : ""}</span>${options.textarea ? `<textarea data-written="${key}" rows="3" maxlength="${options.max || 1000}">${escape(values[key] || "")}</textarea>` : `<input data-written="${key}" type="${options.type || "text"}" value="${escape(values[key] || "")}"${options.type === "date" ? "" : ` maxlength="${options.max || 120}"`}>`}${options.hint ? `<span class="field-hint">${options.hint}</span>` : ""}</label>`;
     const select = (key, label, options) => `<label class="field"><span>${label}</span><select data-written="${key}">${options.map(([value, text]) => `<option value="${escape(value)}"${values[key] === value ? " selected" : ""}>${escape(text)}</option>`).join("")}</select></label>`;
@@ -629,29 +822,76 @@
       ${kind === "updates" ? `${field("date", "Update date", { type: "date", required: true })}<div class="field"><span>Reuse estimate context</span><button type="button" class="button" data-action="reuse-note"${workload(values.scope) ? "" : " disabled"}>Use latest estimate note</button><span class="field-hint">Replaces the body, date and owner for the selected candidate.</span></div>${field("body", "Update / leadership implication", { wide: true, textarea: true, required: true, hint: "Describe what changed and why it matters. Do not infer readiness from resource counts alone." })}` :
         `${field("outcome", "Expected outcome", { wide: true, textarea: true, required: true })}
          ${select("status", "Milestone status", ["Planned", "In progress", "Blocked", "Exploratory", "Done"].map(value => [value, value]))}
-         ${select("targetCandidate", "Link a physical-qubit objective", [["", "No linked resource target"], ...state.workloads.map(item => [item.id, `${item.id} target`])])}
+         ${select("targetCandidate", "Link a physical-qubit objective", [["", "No linked resource target"], ...state.workloads.map(item => [item.id, `${candidateLabel(item)} target`])])}
          <p id="linked-target-preview" class="wide">${linkedTargetPreview(values)}</p>
-         <fieldset id="milestone-dates"${values.targetCandidate ? " disabled" : ""}>${field("targetDate", "Target date / window start", { type: "date", required: !values.targetCandidate })}${field("endDate", "Window end (optional)", { type: "date" })}</fieldset>
+         ${field("window", "Sprint / planning horizon", { wide: true, required: !values.targetCandidate, hint: "Use a flexible label such as Next sprint, Sprint 3-4, or Later. A linked target supplies its own planning window." })}
          ${field("dependencies", "Dependencies / caveats", { wide: true, textarea: true, hint: "A future objective is not an achieved result or a forecast." })}`}
       </div>
       ${kind === "updates" ? `<details class="optional-request"${values.requestKind ? " open" : ""}><summary>Optional decision, blocker or request</summary><div class="form-grid">
         ${select("requestKind", "Action type", [["", "No explicit action"], ...["Decision", "Blocker", "Request"].map(value => [value, value])])}
         ${field("requestOwner", "Action owner")}
         ${field("request", "Action / decision needed", { wide: true, textarea: true, max: 600 })}
-        ${field("requestDue", "Due date (if known)", { type: "date" })}
+        ${field("requestWindow", "Sprint / horizon (optional)", { hint: "A planning window, not a calendar deadline." })}
       </div></details>` : ""}
-      <div class="save-bar"><div><strong>In-tab publication only</strong><p>Valid saves appear immediately in leadership views.</p></div><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-written">Cancel</button><button type="submit" class="button primary">Save ${kind === "updates" ? "bullet" : "milestone"}</button></div></div></form></section>`;
+      <div class="save-bar"><div><strong>Private database save</strong><p>Saved records update this workspace, not public Pages.</p></div><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-written">Cancel</button><button type="submit" class="button primary">Save ${kind === "updates" ? "bullet" : "milestone"}</button></div></div></form></section>`;
   }
 
   function write() {
     const kind = state.writePanel, records = state[kind].filter(record => !record.archived);
     const full = kind === "updates" && records.length >= 4;
     return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain the briefing and plans shown in the leadership Updates &amp; outlook tab.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
-      ${inlineInfo("<strong>Demo editing, not access control.</strong> Use fictional text only. Save changes this open page; reload resets all edits.")}
+      ${storageNotice()}
       <div class="writing-tabs" aria-label="Written content"><button type="button" class="button" data-action="writing-panel" data-kind="updates" aria-pressed="${kind === "updates"}">Briefing (${activeUpdates().length}/4 active)</button><button type="button" class="button" data-action="writing-panel" data-kind="milestones" aria-pressed="${kind === "milestones"}">Milestones (${activeMilestones().length})</button></div>
       <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the leadership briefing order." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
       <ol class="writing-list">${records.map((record, index) => `<li data-written-id="${escape(record.id)}"><h3>${escape(record.title)}</h3><p>${escape(scopeLabel(record.scope))} &middot; ${escape(record.owner)} &middot; ${kind === "updates" ? dateLabel(record.date) : escape(milestoneWindow(record))}</p><div class="record-actions"><button type="button" class="button small" data-action="edit-written" data-kind="${kind}" data-id="${escape(record.id)}">Edit<span class="sr-only"> ${escape(record.title)}</span></button><button type="button" class="button small" data-action="archive-written" data-kind="${kind}" data-id="${escape(record.id)}">Archive<span class="sr-only"> ${escape(record.title)}</span></button>${kind === "updates" ? `<button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="-1"${index === 0 ? " disabled" : ""} aria-label="Move ${escape(record.title)} up">Up</button><button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="1"${index === records.length - 1 ? " disabled" : ""} aria-label="Move ${escape(record.title)} down">Down</button>` : ""}</div></li>`).join("") || '<li>No active records. Add one or restore an archived record below.</li>'}</ol></section>${writtenForm()}</div>
       ${writtenHistory(kind, true)}`;
+  }
+
+  function roadmapEditor() {
+    if (!state.roadmapDraft) state.roadmapDraft = { id: state.roadmap[0].id, values: structuredClone(state.roadmap[0]), dirty: false };
+    const draft = state.roadmapDraft, values = draft.values;
+    return `<div class="page-heading"><div><h1>Edit application roadmap</h1><p>Record evidence and readiness assessments explicitly; counts never mark a stage complete automatically.</p></div></div>${storageNotice()}
+      <section class="sheet"><form id="roadmap-form" class="writing-form" novalidate><label class="field"><span>Roadmap stage</span><select id="roadmap-stage">${state.roadmap.map(stage => `<option value="${stage.id}"${stage.id === draft.id ? " selected" : ""}>${escape(stage.title)}</option>`).join("")}</select></label>
+      <div id="roadmap-errors" class="editor-errors" role="alert" hidden></div><div class="form-grid">
+        <label class="field"><span>Status</span><select data-roadmap="status">${["Not assessed", "Evidence supplied", "In progress", "Blocked", "Complete"].map(status => `<option${status === values.status ? " selected" : ""}>${status}</option>`).join("")}</select></label>
+        <label class="field"><span>Owner</span><input type="text" data-roadmap="owner" maxlength="120" value="${escape(values.owner)}"></label>
+        <label class="field wide"><span>Evidence / caveat</span><textarea data-roadmap="note" rows="4" maxlength="2000">${escape(values.note)}</textarea></label>
+        <label class="field wide"><span>Sprint / planning horizon (optional)</span><input type="text" data-roadmap="window" maxlength="120" value="${escape(values.window)}"></label>
+      </div><div class="save-bar"><p>A saved status appears on Overview and remains in database history.</p><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-roadmap">Cancel</button><button type="submit" class="button primary" id="save-roadmap">Save roadmap stage</button></div></div></form></section>`;
+  }
+
+  async function saveRoadmap() {
+    const draft = state.roadmapDraft;
+    const values = structuredClone(draft.values);
+    for (const key of ["owner", "note", "window"]) values[key] = values[key].trim();
+    const errors = [];
+    if (!values.owner) errors.push("Supply an owner for this assessment.");
+    if (!values.note) errors.push("Record the evidence or caveat for this status.");
+    if (values.owner.length > 120 || values.window.length > 120 || values.note.length > 2000) errors.push("Owner/window must fit 120 characters; evidence must fit 2,000.");
+    if (!["Not assessed", "Evidence supplied", "In progress", "Blocked", "Complete"].includes(values.status)) errors.push("Choose a supported roadmap status.");
+    const box = document.getElementById("roadmap-errors");
+    if (errors.length) {
+      box.hidden = false;
+      box.innerHTML = errors.map(error => `<p>${escape(error)}</p>`).join("");
+      return;
+    }
+    const data = canonicalData(), index = data.roadmap.findIndex(stage => stage.id === draft.id);
+    const before = data.roadmap[index];
+    data.roadmap[index] = { ...values, savedAt: new Date().toISOString(), revisions: [...(before.revisions || []), recordVersion(before)] };
+    if (!await persist(data, "roadmap", structuredClone(draft.values))) return;
+    state.roadmapDraft = null;
+    state.notice = "Roadmap status saved to the private database and Overview.";
+    state.noticeType = "success";
+    render();
+    announce(state.notice);
+  }
+
+  function records() {
+    return `<div class="page-heading"><div><h1>Raw engineering data</h1><p>Exact submitted values, save events and retained snapshot revisions.</p></div></div>${storageNotice()}
+      ${storage.error ? `<div class="inline-message error" role="alert">${escape(storage.error)}</div>` : ""}
+      ${storage.connected ? `<section class="sheet"><div class="sheet-heading"><div><h2>Private SQLite database</h2><p>Revision ${storage.revision} &middot; ${storage.total} raw submissions. The database stays on this computer.</p></div><div class="record-actions"><a class="button" href="/api/export" download>Export raw data (JSON)</a><a class="button" href="/api/database" download>Download database</a><button type="button" class="button" data-action="refresh-records">Refresh</button></div></div>
+      <div class="raw-records">${storage.records.map(record => `<details><summary>${escape(record.kind)} &middot; ${escape(record.savedAt)} &middot; record ${record.id}</summary><pre>${escape(JSON.stringify(record.raw, null, 2))}</pre></details>`).join("") || "<p>No raw submissions were returned.</p>"}</div><p class="history-note">Showing the latest ${storage.records.length} submissions. The JSON export and SQLite download contain the complete raw ledger. No private save automatically publishes to GitHub Pages.</p></section>` : '<section class="sheet"><div class="empty-state"><strong>The public site does not expose the raw-input database.</strong>Run the local workspace command documented in the repository README, then open this tab there. Exports and durable engineer saves are available only from that local service.</div></section>'}
+      <section class="sheet"><div class="sheet-heading"><h2>Supplied source records</h2></div><ul class="source-records">${DATA.sources.map(source => `<li><strong>${escape(source.description)}</strong><p>Source ID: ${escape(source.id)}</p><code>${source.sha256}</code></li>`).join("")}</ul><p class="history-note">Screenshots were received ${dateLabel(DATA.receivedDate)}. Receipt date is not the estimate date. The original supplied counts are stored as exact decimal strings.</p></section>`;
   }
 
   function recordVersion(record) {
@@ -666,7 +906,7 @@
     if (errors.length) box.focus();
   }
 
-  function saveWritten() {
+  async function saveWritten() {
     const draft = state.writtenDraft, values = structuredClone(draft.values), errors = [];
     for (const [key, value] of Object.entries(values)) if (typeof value === "string") values[key] = value.trim();
     for (const input of main.querySelectorAll("[data-written]")) input.removeAttribute("aria-invalid");
@@ -677,7 +917,7 @@
     for (const key of ["title", "owner", draft.kind === "updates" ? "body" : "outcome"]) {
       if (!values[key]) fail(key, `${key === "body" ? "Update / leadership implication" : key === "outcome" ? "Expected outcome" : key === "title" ? "Short headline" : "Owner"} is required.`);
     }
-    for (const [key, limit] of Object.entries({ title: 120, owner: 120, body: 1000, outcome: 1000, dependencies: 1000, request: 600, requestOwner: 120 })) {
+    for (const [key, limit] of Object.entries({ title: 120, owner: 120, body: 1000, outcome: 1000, dependencies: 1000, request: 600, requestOwner: 120, requestWindow: 120, window: 120 })) {
       if (values[key]?.length > limit) fail(key, `${key} must be ${limit} characters or fewer.`);
     }
     if (!["all", "system:1", "system:2", "system:3", "system:4", ...state.workloads.map(item => item.id)].includes(values.scope)) fail("scope", "Choose an existing candidate or system scope.");
@@ -686,81 +926,84 @@
       if (!draft.id && activeUpdates().length >= 4) errors.push("Four briefing bullets are active. Archive one before adding another.");
       if (!["", "Decision", "Blocker", "Request"].includes(values.requestKind)) fail("requestKind", "Choose a supported action type.");
       if (values.requestKind && (!values.request || !values.requestOwner)) fail("request", "An explicit action needs both its text and its owner.");
-      if (!values.requestKind && (values.request || values.requestOwner || values.requestDue)) fail("requestKind", "Choose an action type, or clear the unused action fields.");
-      if (values.requestDue && !validDate(values.requestDue)) fail("requestDue", "Supply a valid action due date, or leave it empty.");
+      if (!values.requestKind && (values.request || values.requestOwner || values.requestWindow)) fail("requestKind", "Choose an action type, or clear the unused action fields.");
     } else {
       if (!["Planned", "In progress", "Blocked", "Exploratory", "Done"].includes(values.status)) fail("status", "Choose a supported milestone status.");
       if (values.targetCandidate) {
         const item = workload(values.targetCandidate);
         if (!item || !appliesTo(values.scope, item)) fail("targetCandidate", "The linked target candidate must belong to the milestone's scope.");
-        else if (!isCount(latest(item).context.targetPhysicalQubits) || !validDate(latest(item).context.targetDate)) fail("targetCandidate", "Supply this candidate's target value and date in Estimates before linking it.");
-        values.targetDate = "";
-        values.endDate = "";
-      } else {
-        if (!validDate(values.targetDate)) fail("targetDate", "Supply a valid target date or link an existing resource target.");
-        if (values.endDate && (!validDate(values.endDate) || values.endDate < values.targetDate)) fail("endDate", "The window end must be a valid date on or after its start.");
-      }
+        else if (!isCount(latest(item).context.targetPhysicalQubits) || !latest(item).context.targetWindow.trim()) fail("targetCandidate", "Supply this candidate's target value and planning window in Estimates before linking it.");
+        values.window = "";
+      } else if (!values.window) fail("window", "Supply a sprint or planning horizon, or link an existing target.");
     }
     if (errors.length) { writtenErrors(errors); return; }
     const original = draft.id && state[draft.kind].find(record => record.id === draft.id);
     const record = { ...values, id: original?.id || `local-${crypto.randomUUID()}`, archived: false, local: true, savedAt: new Date().toISOString(), revisions: original ? [...original.revisions, recordVersion(original)] : [] };
-    if (original) state[draft.kind][state[draft.kind].indexOf(original)] = record;
-    else state[draft.kind].push(record);
+    const data = canonicalData();
+    if (original) data[draft.kind][state[draft.kind].indexOf(original)] = record;
+    else data[draft.kind].push(record);
+    if (!await persist(data, draft.kind === "updates" ? "written-update" : "milestone", structuredClone(draft.values))) return;
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to Updates & outlook in this open page only.`;
+    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to the private database and Updates & outlook.${storage.error ? ` ${storage.error}` : ""}`;
     render();
     main.focus({ preventScroll: true });
     window.scrollTo(0, 0);
     announce(state.notice);
   }
 
-  function archiveWritten(kind, id, restore = false) {
+  async function archiveWritten(kind, id, restore = false) {
     if (restore && kind === "updates" && activeUpdates().length >= 4) {
       state.notice = "Four briefing bullets are already active. Archive one before restoring another; nothing changed.";
       state.noticeType = "error";
       render();
       return;
     }
-    const record = state[kind].find(item => item.id === id);
+    const data = canonicalData();
+    const record = data[kind].find(item => item.id === id);
     record.revisions.push(recordVersion(record));
     record.archived = !restore;
     record.local = true;
     record.savedAt = new Date().toISOString();
+    if (!await persist(data, restore ? "restore" : "archive", { kind, id })) return;
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${restore ? "Restored" : "Archived"} "${record.title}". Prior text is retained in history; this change exists only in the open page.`;
+    state.notice = `${restore ? "Restored" : "Archived"} "${record.title}". Prior text and this action are retained in the private database.`;
     render();
     announce(state.notice);
   }
 
-  function moveWritten(id, direction) {
+  async function moveWritten(id, direction) {
     const active = activeUpdates(), index = active.findIndex(record => record.id === id);
     const other = active[index + direction];
     if (!other) return;
     const from = state.updates.indexOf(active[index]), to = state.updates.indexOf(other);
-    [state.updates[from], state.updates[to]] = [state.updates[to], state.updates[from]];
+    const data = canonicalData();
+    [data.updates[from], data.updates[to]] = [data.updates[to], data.updates[from]];
+    if (!await persist(data, "reorder", { id, direction })) return;
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     render();
     main.querySelector(`[data-written-id="${id}"] [data-action="edit-written"]`).focus();
-    announce("Leadership briefing order updated, in this tab only.");
+    announce("Leadership briefing order saved to the private database.");
   }
 
   function newDraft() {
     return {
-      asOf: DEMO.referenceDate,
+      asOf: "",
       note: "",
       contextId: state.selected,
       dirty: false,
+      pastes: [],
       checked: new Set(),
       rows: new Map(state.workloads.map(item => {
         const current = latest(item);
         return [item.id, {
           original: structuredClone(current),
           metrics: Object.fromEntries(fields.map(field => [field.key, group(current.metrics[field.key])])),
+          rawMetrics: Object.fromEntries(fields.map(field => [field.key, current.metrics[field.key] ?? ""])),
           config: current.config,
           caveat: current.caveat,
           owner: current.owner,
@@ -775,26 +1018,26 @@
   function editorContextFields() {
     const draft = state.draft, row = draft.rows.get(draft.contextId);
     const textField = (key, label, value, hint, options = {}) => `<label class="field${options.className ? ` ${options.className}` : ""}"><span>${escape(label)}${options.required ? '<span class="required">Required</span>' : ""}</span><input type="${options.type || "text"}" data-context="${escape(key)}" value="${escape(value)}" ${options.required ? "required" : ""} ${options.inputmode ? `inputmode="${options.inputmode}"` : ""}><span class="field-hint">${escape(hint)}</span></label>`;
-    return `<div class="context-workload-select"><label class="field-inline">Context for<select id="context-workload">${state.workloads.map(item => `<option${item.id === draft.contextId ? " selected" : ""}>${escape(item.id)}</option>`).join("")}</select></label><p>${inputBadge("Dummy engineering inputs")} Editing context automatically selects this workload.</p></div>
+    return `<div class="context-workload-select"><label class="field-inline">Context for<select id="context-workload">${state.workloads.map(item => `<option value="${item.id}"${item.id === draft.contextId ? " selected" : ""}>${escape(candidateLabel(item))}</option>`).join("")}</select></label><p>Editing context selects this application.</p></div>
       <div class="context-fields">
         ${textField("config", "Assumptions version", row.config, "Use a new version when the comparison basis changes.", { required: true })}
         ${textField("owner", "Estimate owner", row.owner, "Who can explain this estimate?", { required: true })}
         ${textField("source", "Source / run reference", row.source, "A traceable source, not a link invented by the dashboard.", { required: true })}
-        <label class="field"><span>Estimate maturity</span><select data-context="maturity">${["Provisional", "Reviewed"].map(value => `<option${row.maturity === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="field-hint">Descriptive engineer input, not an approval gate. Valid Save is immediate.</span></label>
+        <label class="field"><span>Estimate maturity</span><select data-context="maturity">${["Unspecified", "Provisional", "Reviewed"].map(value => `<option${row.maturity === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="field-hint">Descriptive engineer input, not an approval gate.</span></label>
         <label class="field wide"><span>Caveat / assumptions<span class="required">Required</span></span><textarea rows="2" data-context="caveat" required>${escape(row.caveat)}</textarea><span class="field-hint">Shown in full in Resource details &amp; assumptions. Use a new version when the comparison basis changes.</span></label>
         <div class="subsection">Targets and reporting cadence</div>
         ${textField("targetPhysicalQubits", "Physical-qubit target", row.context.targetPhysicalQubits, "Engineer-set objective. Leave blank if no target is agreed.", { inputmode: "numeric" })}
-        ${textField("targetDate", "Target date", row.context.targetDate, "A plan, not a promise of a future result.", { type: "date" })}
+        ${textField("targetWindow", "Target sprint / planning horizon", row.context.targetWindow, "A flexible label, not a calendar commitment.")}
         ${textField("targetConfig", "Target assumptions version", row.context.targetConfig, "Must match the estimate before a gap is calculated.")}
-        ${textField("cadenceDays", "Expected update interval (days)", row.context.cadenceDays, "The example is weekly. Engineering must confirm the real cadence.", { inputmode: "numeric" })}
+        ${textField("cadenceDays", "Expected update interval (days)", row.context.cadenceDays, "Optional. No reporting cadence is assumed.", { inputmode: "numeric" })}
         <div class="subsection">Runtime: separate from operation counts</div>
         ${textField("runtimeHours", "Estimated runtime (hours)", row.context.runtimeHours, "Supply a timing-model result, not a gate-count conversion.", { inputmode: "decimal" })}
-        ${textField("runtimeLowHours", "Illustrative range: lower (hours)", row.context.runtimeLowHours, "Optional; state what the range represents.", { inputmode: "decimal" })}
-        ${textField("runtimeHighHours", "Illustrative range: upper (hours)", row.context.runtimeHighHours, "This demo does not claim statistical confidence.", { inputmode: "decimal" })}
+        ${textField("runtimeLowHours", "Runtime range: lower (hours)", row.context.runtimeLowHours, "Optional; state what the range represents.", { inputmode: "decimal" })}
+        ${textField("runtimeHighHours", "Runtime range: upper (hours)", row.context.runtimeHighHours, "No statistical confidence is implied without a defined model.", { inputmode: "decimal" })}
         <label class="field wide"><span>Runtime model and assumptions</span><textarea rows="2" data-context="timingModel">${escape(row.context.timingModel)}</textarea><span class="field-hint">Include cycle timing, parallelism, scheduling, and relevant hardware/error-correction assumptions.</span></label>
         <div class="subsection">Gate share: confirm the denominator first</div>
         <label class="gate-confirm"><input type="checkbox" data-context="gateBasisConfirmed"${row.context.gateBasisConfirmed ? " checked" : ""}><span>The three gate categories are on the same logical/physical level and do not overlap. Their sum is a meaningful denominator for the displayed share.</span></label>
-        ${textField("gateBasis", "Gate-basis definition", row.context.gateBasis, "The current definition is synthetic and must be confirmed by engineering.", { className: "wide" })}
+        ${textField("gateBasis", "Gate-basis definition", row.context.gateBasis, "Confirm the logical level, categories and counting method before enabling a share.", { className: "wide" })}
       </div>`;
   }
 
@@ -804,10 +1047,10 @@
     const checked = draft.checked.size;
     const rows = state.workloads.map((item, rowIndex) => {
       const row = draft.rows.get(item.id);
-      return `<tr class="${draft.checked.has(item.id) ? "checked-row" : ""}" data-editor-row="${escape(item.id)}"><th scope="row" class="frozen"><label class="row-select"><input type="checkbox" data-row-check="${escape(item.id)}"${draft.checked.has(item.id) ? " checked" : ""}><span>${escape(item.id)}</span></label></th>${fields.map((field, columnIndex) => `<td><input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-row="${rowIndex}" data-col="${columnIndex}" data-workload-id="${escape(item.id)}" data-field="${field.key}" aria-label="${escape(item.id)} ${escape(field.label)}" value="${escape(row.metrics[field.key])}"></td>`).join("")}</tr>`;
+      return `<tr class="${draft.checked.has(item.id) ? "checked-row" : ""}" data-editor-row="${escape(item.id)}"><th scope="row" class="frozen"><label class="row-select"><input type="checkbox" data-row-check="${escape(item.id)}"${draft.checked.has(item.id) ? " checked" : ""}><span>${escape(candidateLabel(item))}</span></label></th>${fields.map((field, columnIndex) => `<td><input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-row="${rowIndex}" data-col="${columnIndex}" data-workload-id="${escape(item.id)}" data-field="${field.key}" aria-label="${escape(item.name)} ${escape(field.label)}" value="${escape(row.metrics[field.key])}"></td>`).join("")}</tr>`;
     }).join("");
-    return `<div class="page-heading editor-heading"><div><h1>Update resource estimates</h1><p>Paste from Excel or edit a cell. A valid Save updates leadership's view automatically.</p></div><div class="heading-controls"><button class="button" type="button" data-action="sample-edit">Try a sample update</button><a href="#guide" data-route="guide" class="text-button">Input guide &rarr;</a></div></div>
-      ${inlineInfo("<strong>Preview only.</strong> Changes stay in this open page; there is no database or real publication. Use dummy data only.")}
+    return `<div class="page-heading editor-heading"><div><h1>Update resource estimates</h1><p>Paste exact counts or edit cells. Save keeps the original input and a normalized snapshot in the private database.</p></div><a href="#guide" data-route="guide" class="text-button">Input guide &rarr;</a></div>
+      ${storageNotice()}
       <section class="sheet" aria-label="Engineering entry table">
         <div class="edit-meta"><label class="field"><span>Estimate as of<span class="required">Required</span></span><input type="date" id="estimate-date" value="${escape(draft.asOf)}" required><span class="field-hint">The date these figures describe, not the time you save.</span></label><label class="field"><span>What changed?<span class="required">Required</span></span><input type="text" id="change-note" maxlength="400" value="${escape(draft.note)}" placeholder="Briefly explain the change and its implication." required><span class="field-hint">Applied to selected workloads. For different explanations, save separate batches.</span></label></div>
         <div class="editor-toolbar"><p>Select rows to save. Editing a cell selects its row automatically.</p><button class="text-button" type="button" data-action="paste-help" aria-expanded="false" aria-controls="paste-help">Excel paste help</button></div>
@@ -821,12 +1064,12 @@
   }
 
   function render() {
-    const views = { overview, compare, metrics, updates, edit, write, guide };
+    const views = { overview, compare, metrics, updates, edit, write, roadmap: roadmapEditor, records, guide };
     const engineering = engineeringRoutes.has(state.view);
-    const tabs = engineering ? [["edit", "Estimates"], ["write", "Updates & outlook"], ["guide", "Input guide"]]
+    const tabs = engineering ? [["edit", "Estimates"], ["write", "Updates & outlook"], ["roadmap", "Roadmap"], ["records", "Raw data"], ["guide", "Input guide"]]
       : [["overview", "Overview"], ["compare", "Compare"], ["metrics", "All metrics"], ["updates", "Updates & outlook"]];
     document.getElementById("view-navigation").innerHTML = tabs.map(([route, text]) => `<a data-route="${route}" href="${escape(urlFor(route))}"${state.view === route ? ' aria-current="page"' : ""}>${escape(text)}</a>`).join("");
-    document.getElementById("view-description").textContent = engineering ? "Engineering demo / in-tab edits only" : state.view === "overview" ? "" : "Leadership reading view";
+    document.getElementById("view-description").textContent = engineering ? storage.connected ? "Private database workspace" : "Read-only snapshot" : "";
     document.querySelector(".brand").dataset.route = engineering ? "edit" : "overview";
     main.innerHTML = state.urlError ? unavailableView() : `${state.notice ? `<div class="inline-message ${state.noticeType}" role="${state.noticeType === "error" ? "alert" : "status"}">${state.noticeType === "error" ? infoIcon : checkIcon}<p>${escape(state.notice)}</p></div>` : ""}${views[state.view]()}`;
     for (const link of document.querySelectorAll("[data-route]")) {
@@ -842,12 +1085,20 @@
     }
     document.getElementById("share-action").disabled = Boolean(state.urlError);
     document.getElementById("share-action").classList.toggle("primary", state.view !== "overview");
-    document.title = `${{ overview: "Overview", compare: "Compare", metrics: "All metrics", updates: "Updates & outlook", edit: "Engineering entry", write: "Written updates editor", guide: "Engineering input guide" }[state.view]} - Resource estimates preview`;
+    document.body.dataset.storage = storage.connected ? "private" : "read-only";
+    document.getElementById("storage-caption").textContent = storage.connected
+      ? "Private local SQLite workspace. Saves stay on this computer; they do not publish to the website."
+      : "Published source snapshot. No sign-in or public write access; private engineering data is stored separately.";
+    if (engineering && !storage.connected) {
+      for (const input of main.querySelectorAll('[data-field],[data-context],[data-row-check],#select-all-rows,#estimate-date,#change-note,#save-updates,[data-action="new-written"],[data-action="edit-written"],[data-action="archive-written"],[data-action="restore-written"],[data-action="move-written"],[data-roadmap],#save-roadmap')) input.disabled = true;
+    }
+    document.title = `${{ overview: "Overview", compare: "Compare", metrics: "All metrics", updates: "Updates & outlook", edit: "Engineering entry", write: "Written updates editor", roadmap: "Application roadmap", records: "Raw engineering data", guide: "Engineering input guide" }[state.view]} - Resource estimates`;
   }
 
   function clearDrafts() {
     state.draft = null;
     state.writtenDraft = null;
+    state.roadmapDraft = null;
   }
 
   function commitUrl(url, push = true, index = navigationIndex) {
@@ -870,9 +1121,10 @@
     commitUrl(urlFor(view, options));
   }
 
-  const hasUnsavedEdits = () => Boolean(state.draft?.dirty || state.writtenDraft?.dirty);
+  const hasUnsavedEdits = () => Boolean(state.draft?.dirty || state.writtenDraft?.dirty || state.roadmapDraft?.dirty);
 
   function protectEdits(action) {
+    if (storage.saving) { announce("Wait for the database save to finish before navigating."); return; }
     if (hasUnsavedEdits()) {
       state.pendingAction = action;
       if (!dialog.open) dialog.showModal();
@@ -889,7 +1141,7 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
       await navigator.clipboard.writeText(input.value);
-      status.textContent = "Published view link copied. In-tab edits are not included.";
+      status.textContent = "Published snapshot link copied. Private database edits are not included.";
     } catch (error) {
       status.textContent = "Automatic clipboard copy is unavailable in this browser context. Select and copy the link above manually.";
       input.focus();
@@ -901,8 +1153,12 @@
     const snapshot = selectedSnapshot(workload(state.selected));
     const shareSnapshot = snapshot.local ? published(state.selected) : snapshot;
     const view = state.view === "write" ? "updates" : engineeringRoutes.has(state.view) ? "overview" : state.view;
-    document.getElementById("share-url").value = urlFor(view, { snapshot: shareSnapshot.id });
-    document.getElementById("share-copy").textContent = `${state.hasLocalChanges ? "This page has in-tab edits that another visitor cannot load. " : ""}This link opens the published ${state.selected} snapshot from ${dateLabel(shareSnapshot.asOf)}, ${shareSnapshot.config}, revision ${shareSnapshot.revision + 1}. It preserves the tab and system filter. No edited counts, written text or owner details are put in the URL.`;
+    const url = new URL(urlFor(view, { snapshot: shareSnapshot.id }));
+    const publishedUrl = new URL("https://rohit-2002-28.github.io/qdk-qce26-tutorial/resource-estimates/");
+    publishedUrl.search = url.search;
+    publishedUrl.hash = url.hash;
+    document.getElementById("share-url").value = publishedUrl.href;
+    document.getElementById("share-copy").textContent = `${state.hasLocalChanges ? "This workspace contains private database records not available on the public website. " : ""}This link opens the supplied ${candidateName(state.selected)} snapshot: ${dateLabel(shareSnapshot.asOf)}, revision ${shareSnapshot.revision + 1}. It preserves the tab, system filter and global metric selection. Private counts, written notes and owner details are not serialized into the URL.`;
     document.getElementById("share-status").textContent = "";
     document.getElementById("share-dialog").showModal();
     void copyShareLink();
@@ -918,7 +1174,7 @@
     }
     const count = draft.checked.size;
     document.getElementById("selected-row-count").textContent = `${count} workload${count === 1 ? "" : "s"} selected`;
-    document.getElementById("save-updates").disabled = count === 0;
+    document.getElementById("save-updates").disabled = count === 0 || !storage.connected;
     const all = document.getElementById("select-all-rows");
     all.checked = count === state.workloads.length;
     all.indeterminate = count > 0 && count < state.workloads.length;
@@ -943,11 +1199,12 @@
     for (const field of ["config", "caveat", "owner", "source"]) {
       if (!row[field].trim()) errors.push(`${id}: supply ${field === "config" ? "an assumptions version" : field === "caveat" ? "a visible caveat or an explicit unchanged-assumptions note" : `an estimate ${field}`}.`);
     }
-    if (!["Provisional", "Reviewed"].includes(row.maturity)) errors.push(`${id}: choose Provisional or Reviewed maturity.`);
+    if (!["Unspecified", "Provisional", "Reviewed"].includes(row.maturity)) errors.push(`${id}: choose Unspecified, Provisional or Reviewed maturity.`);
     if (context.targetPhysicalQubits.trim()) {
       try { context.targetPhysicalQubits = parseCount(context.targetPhysicalQubits); }
       catch (error) { errors.push(`${id} target: ${error.message}`); }
-      if (!validDate(context.targetDate)) errors.push(`${id}: supply a valid target date.`);
+      if (!context.targetWindow.trim()) errors.push(`${id}: supply a target sprint or planning horizon.`);
+      if (context.targetWindow.length > 120) errors.push(`${id}: the target planning window must be 120 characters or fewer.`);
       if (!context.targetConfig.trim()) errors.push(`${id}: supply the target's assumptions version.`);
     } else {
       context.targetPhysicalQubits = "";
@@ -972,7 +1229,7 @@
     return context;
   }
 
-  function save() {
+  async function save() {
     const draft = state.draft, errors = [], prepared = [];
     for (const input of main.querySelectorAll('[aria-invalid="true"]')) input.removeAttribute("aria-invalid");
     if (!validDate(draft.asOf)) {
@@ -1000,14 +1257,14 @@
       document.getElementById("editor-errors").scrollIntoView({ block: "center" });
       return;
     }
-    // Validate the entire batch before committing any in-memory snapshot.
+    const data = canonicalData();
     let historicalCount = 0;
     for (const entry of prepared) {
-      const item = workload(entry.id);
-      if (draft.asOf < latest(item).asOf) historicalCount++;
+      const item = data.workloads.find(item => item.id === entry.id);
+      if (latest(item).asOf && draft.asOf < latest(item).asOf) historicalCount++;
       const revision = Math.max(-1, ...item.snapshots.filter(snapshot => snapshot.asOf === draft.asOf).map(snapshot => snapshot.revision)) + 1;
       const snapshot = {
-        id: `local-${crypto.randomUUID()}`,
+        id: `saved-${crypto.randomUUID()}`,
         asOf: draft.asOf,
         revision,
         metrics: entry.metrics,
@@ -1023,13 +1280,18 @@
       };
       item.snapshots.push(snapshot);
     }
+    const raw = { asOf: draft.asOf, note: draft.note, pastes: structuredClone(draft.pastes), rows: [...draft.checked].map(id => {
+      const { original, metrics, rawMetrics, ...inputs } = draft.rows.get(id);
+      return { id, ...structuredClone(inputs), metrics: structuredClone(rawMetrics) };
+    }) };
+    if (!await persist(data, "estimates", raw)) return;
     state.selected = prepared[0].id;
     state.snapshot = latest(workload(state.selected)).id;
     state.filter = "all";
     state.hasLocalChanges = true;
     const names = prepared.map(row => row.id).join(", ");
     state.noticeType = "success";
-    state.notice = `Demo saved: ${names}. Estimate as of ${dateLabel(draft.asOf)}. ${historicalCount ? "Backdated records were added to history; later-dated estimates remain current. " : ""}Counts, targets and plots are synchronized in this open page only. Briefing bullets are unchanged; reuse the saved change note in Engineering > Updates & outlook when a briefing is needed.`;
+    state.notice = `Saved to the private database: ${names}. Estimate as of ${dateLabel(draft.asOf)}. ${historicalCount ? "Backdated records were added to history; later-dated estimates remain current. " : ""}Raw inputs, revisions and charts are synchronized. Public Pages is unchanged.${storage.error ? ` ${storage.error}` : ""}`;
     state.draft = null;
     commitNavigation("overview");
     announce(state.notice);
@@ -1054,7 +1316,7 @@
         const column = startCol + columnOffset;
         if (column >= fields.length) { errors.push("The paste extends beyond the seven count columns. Paste counts without row names or headers."); break; }
         const id = state.workloads[rowIndex].id, key = fields[column].key;
-        try { patches.push({ id, key, value: group(parseCount(lines[rowOffset][columnOffset])), rowIndex, column }); }
+        try { patches.push({ id, key, raw: lines[rowOffset][columnOffset], value: group(parseCount(lines[rowOffset][columnOffset])), rowIndex, column }); }
         catch (error) { errors.push(`${id} - ${fields[column].label}: ${error.message}`); }
       }
     }
@@ -1064,6 +1326,7 @@
     }
     for (const patch of patches) {
       state.draft.rows.get(patch.id).metrics[patch.key] = patch.value;
+      state.draft.rows.get(patch.id).rawMetrics[patch.key] = patch.raw;
       state.draft.checked.add(patch.id);
       const target = main.querySelector(`[data-row="${patch.rowIndex}"][data-col="${patch.column}"]`);
       target.value = patch.value;
@@ -1071,9 +1334,16 @@
       target.removeAttribute("aria-invalid");
     }
     state.draft.dirty = true;
+    state.draft.pastes.push({ startRow, startCol, text });
     editorErrors([]);
     syncEditorSelection();
     announce(`${patches.length} cells pasted. Review the date and change note, then save.`);
+  }
+
+  function selectGlobalPoint(id, snapshotId) {
+    state.globalPoint = { id, snapshotId };
+    document.getElementById("global-point-detail").innerHTML = globalPointDetails(id, snapshotId);
+    for (const element of main.querySelectorAll("[data-global-id]")) element.setAttribute("aria-pressed", String(element.dataset.globalId === id && element.dataset.snapshot === snapshotId));
   }
 
   document.addEventListener("click", event => {
@@ -1084,6 +1354,11 @@
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || routeLink.hasAttribute("download") || (routeLink.target && routeLink.target !== "_self")) return;
       event.preventDefault();
       protectEdits(() => commitUrl(routeLink.href));
+      return;
+    }
+    const globalPoint = event.target.closest("[data-global-id]");
+    if (globalPoint) {
+      selectGlobalPoint(globalPoint.dataset.globalId, globalPoint.dataset.snapshot);
       return;
     }
     const point = event.target.closest("[data-point]");
@@ -1101,6 +1376,9 @@
         document.getElementById("resource-details").open = true;
         document.getElementById("snapshot-change-note").focus();
       }
+      else if (name === "show-all-series") { state.globalHidden.clear(); render(); main.querySelector('[data-action="show-all-series"]').focus(); }
+      else if (name === "refresh-records") void refreshRecords().then(render);
+      else if (name === "cancel-roadmap") protectEdits(() => { state.roadmapDraft = null; render(); });
       else if (name === "writing-panel") protectEdits(() => {
         state.writtenDraft = null;
         state.writePanel = action.dataset.kind;
@@ -1115,7 +1393,7 @@
       else if (name === "reuse-note") {
         const values = state.writtenDraft.values;
         const snapshot = latest(workload(values.scope));
-        Object.assign(values, { body: snapshot.reason, owner: snapshot.owner, date: snapshot.asOf, snapshotId: snapshot.id });
+        Object.assign(values, { body: snapshot.reason, owner: snapshot.owner, date: snapshot.asOf || "", snapshotId: snapshot.id });
         state.writtenDraft.dirty = true;
         for (const key of ["body", "owner", "date"]) main.querySelector(`[data-written="${key}"]`).value = values[key];
         announce("The latest scoped estimate note, owner and date were copied into this unsaved bullet.");
@@ -1134,39 +1412,9 @@
         const help = document.getElementById("paste-help");
         help.hidden = !help.hidden;
         action.setAttribute("aria-expanded", String(!help.hidden));
-      } else if (name === "sample-edit") {
-        const id = "App 1a", row = state.draft.rows.get(id);
-        const values = ["114000000", "142500000000", "28000000", "66000000", "20000000", "230", "345000"];
-        fields.forEach((field, index) => { row.metrics[field.key] = group(values[index]); });
-        row.context.runtimeHours = "6.0";
-        row.context.runtimeLowHours = "5.4";
-        row.context.runtimeHighHours = "6.8";
-        state.draft.note = "Demo update: a revised circuit schedule reduced counts on the same assumptions basis.";
-        state.draft.checked.add(id);
-        state.draft.dirty = true;
-        state.draft.contextId = id;
-        render();
-        for (const cell of main.querySelectorAll(`[data-workload-id="${id}"]`)) cell.classList.add("changed-cell");
-        announce("A sample App 1a update is ready. Save to see the dashboard change.");
       } else if (name === "save") save();
       else if (name === "cancel-edit") navigate("overview");
-      else if (name === "reset") protectEdits(() => {
-        state.workloads = structuredClone(DEMO.workloads);
-        state.updates = structuredClone(DEMO.updates);
-        state.milestones = structuredClone(DEMO.milestones);
-        clearDrafts();
-        state.selected = "App 1a";
-        state.snapshot = published("App 1a").id;
-        state.filter = "all";
-        state.points = { qubits: "App 1a", operations: "App 1a" };
-        state.hasLocalChanges = false;
-        state.exact = false;
-        state.ratios = false;
-        state.history = false;
-        state.notice = "";
-        commitNavigation("overview");
-        announce("The synthetic example data has been restored.");
-      });
+      else if (name === "reload-data") protectEdits(() => location.reload());
       return;
     }
   });
@@ -1178,9 +1426,10 @@
     state.writtenDraft.dirty = true;
     target.removeAttribute("aria-invalid");
     if (target.dataset.written === "targetCandidate") {
-      document.getElementById("milestone-dates").disabled = Boolean(target.value);
       document.getElementById("linked-target-preview").innerHTML = linkedTargetPreview(values);
-      for (const key of ["targetDate", "endDate"]) main.querySelector(`[data-written="${key}"]`).value = target.value ? "" : values[key];
+      const input = main.querySelector('[data-written="window"]');
+      input.disabled = Boolean(target.value);
+      input.value = target.value ? milestoneTarget(values)?.context.targetWindow || "" : values.window;
     }
     if (target.dataset.written === "scope" && state.writtenDraft.kind === "updates") {
       values.snapshotId = "";
@@ -1192,7 +1441,22 @@
   main.addEventListener("change", event => {
     const target = event.target;
     if (captureWritten(target)) return;
-    if (target.id === "system-filter") {
+    if (target.id === "overview-mode") {
+      navigate("overview", { overviewMode: target.value });
+      document.getElementById("overview-mode").focus();
+    } else if (target.id === "global-metric") {
+      navigate("overview", { globalMetric: target.value, overviewMode: "global" });
+      document.getElementById("global-metric").focus();
+    } else if (target.dataset.globalVisible) {
+      if (target.checked) state.globalHidden.delete(target.dataset.globalVisible);
+      else state.globalHidden.add(target.dataset.globalVisible);
+      render();
+      main.querySelector(`[data-global-visible="${target.dataset.globalVisible}"]`).focus();
+    } else if (target.id === "roadmap-stage") {
+      const id = target.value;
+      protectEdits(() => { state.roadmapDraft = { id, values: structuredClone(state.roadmap.find(stage => stage.id === id)), dirty: false }; render(); });
+      if (hasUnsavedEdits()) target.value = state.roadmapDraft.id;
+    } else if (target.id === "system-filter") {
       const item = target.value === "all" || String(workload(state.selected).system) === target.value ? workload(state.selected) : state.workloads.find(item => String(item.system) === target.value);
       navigate("overview", { filter: target.value, selected: item.id, snapshot: item.id === state.selected ? state.snapshot : latest(item).id });
       document.getElementById("system-filter").focus();
@@ -1230,6 +1494,11 @@
   });
 
   main.addEventListener("input", event => {
+    if (event.target.dataset.roadmap && state.roadmapDraft) {
+      state.roadmapDraft.values[event.target.dataset.roadmap] = event.target.value;
+      state.roadmapDraft.dirty = true;
+      return;
+    }
     if (captureWritten(event.target)) return;
     if (state.view !== "edit") return;
     const target = event.target, draft = state.draft;
@@ -1243,6 +1512,7 @@
       target.removeAttribute("aria-invalid");
     } else if (target.dataset.field) {
       draft.rows.get(target.dataset.workloadId).metrics[target.dataset.field] = target.value;
+      draft.rows.get(target.dataset.workloadId).rawMetrics[target.dataset.field] = target.value;
       target.classList.add("changed-cell");
       target.removeAttribute("aria-invalid");
       selectEditedRow(target.dataset.workloadId);
@@ -1271,8 +1541,11 @@
   main.addEventListener("paste", handlePaste);
   main.addEventListener("submit", event => {
     if (event.target.id === "written-form") { event.preventDefault(); saveWritten(); }
+    if (event.target.id === "roadmap-form") { event.preventDefault(); saveRoadmap(); }
   });
   main.addEventListener("focusin", event => {
+    const globalPoint = event.target.closest("[data-global-id]");
+    if (globalPoint) selectGlobalPoint(globalPoint.dataset.globalId, globalPoint.dataset.snapshot);
     const point = event.target.closest("[data-point]");
     if (point) selectPoint(point.dataset.plot, point.dataset.point);
   });
@@ -1282,6 +1555,12 @@
       event.preventDefault();
       snapshotPicker.open = false;
       snapshotPicker.querySelector("summary").focus();
+      return;
+    }
+    const globalPoint = event.target.closest('g[data-global-id]');
+    if (globalPoint && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      selectGlobalPoint(globalPoint.dataset.globalId, globalPoint.dataset.snapshot);
       return;
     }
     const point = event.target.closest('g[data-point]');
@@ -1341,7 +1620,7 @@
   window.addEventListener("popstate", historyChanged);
   window.addEventListener("hashchange", historyChanged);
   window.addEventListener("beforeunload", event => {
-    if (hasUnsavedEdits()) { event.preventDefault(); event.returnValue = ""; }
+    if (hasUnsavedEdits() || storage.saving) { event.preventDefault(); event.returnValue = ""; }
   });
 
   let resizeTimer;
@@ -1352,9 +1631,13 @@
     }, 150);
   });
 
+  await connectDatabase();
   Object.assign(state, readLocation(location.href));
   state.points = { qubits: state.selected, operations: state.selected };
   navigationUrl = state.urlError ? location.href : urlFor();
   history.replaceState({ resourceDemoIndex: 0 }, "", navigationUrl);
   render();
-})();
+})().catch(error => {
+  console.error("Resource dashboard initialization failed", error);
+  document.getElementById("main").textContent = "The dashboard could not be initialized. No inputs were saved. Check the source data or local workspace log before retrying.";
+});

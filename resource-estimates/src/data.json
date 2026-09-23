@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "datasetLabel": "Supplied application resource estimates",
+  "receivedDate": "2026-09-23",
+  "referenceDate": null,
+  "systems": [
+    {"id": 1, "name": "Magnet Models"},
+    {"id": 2, "name": "Laser Models (Dicke)"},
+    {"id": 3, "name": "Model Hamiltonian Energy Estimation (Hubbard Model)"},
+    {"id": 4, "name": "Small Chemistry Problems"}
+  ],
+  "fields": [
+    {"key": "logicalOps", "label": "Logical operations", "short": "Logical operations", "group": "Operations"},
+    {"key": "physicalOps", "label": "Physical operations (w/o move)", "short": "Physical ops (w/o move)", "group": "Operations"},
+    {"key": "nonClifford", "label": "Non-Clifford gates", "short": "Non-Clifford gates", "group": "Operations"},
+    {"key": "clifford1", "label": "1-qubit Clifford", "short": "1-qubit Clifford", "group": "Operations"},
+    {"key": "clifford2", "label": "2-qubit Clifford", "short": "2-qubit Clifford", "group": "Operations"},
+    {"key": "logicalQubits", "label": "Logical qubits", "short": "Logical qubits", "group": "Qubits"},
+    {"key": "physicalQubits", "label": "Physical qubits", "short": "Physical qubits", "group": "Qubits"}
+  ],
+  "assumptions": {
+    "emulator": "Emulator runs use Clifford-rounding: non-Clifford angles are rounded to the nearest pi/2 multiple.",
+    "physicalOperations": "The supplied column is Physical ops (w/o move). Retain this movement-excluded count; it is not a total including all physical transport.",
+    "interpretation": "QDK's neutral-atom model represents atom transport with PHYSICAL_MOVE, separately from the SWAP instruction. The producing report and exact exclusion filter were not supplied: do not assume that w/o move excludes all SWAP/routing gates, or derive runtime from this count.",
+    "correctness": "Clifford-rounded emulator runs do not by themselves establish correctness for the original non-Clifford circuits.",
+    "history": "The supplied tables contain one snapshot per candidate, without estimate dates. Historical points, runtime models, targets, owners and completion dates were not supplied.",
+    "references": [
+      {"title": "QDK neutral-atom physical transport model", "url": "https://github.com/microsoft/qdk/blob/313517959aec21d9f6a9ad420bf75684807e0b2a/source/qdk_package/qdk/qre/models/qubits/_neutral_atoms.py"},
+      {"title": "QDK instruction identities: SWAP and PHYSICAL_MOVE", "url": "https://github.com/microsoft/qdk/blob/313517959aec21d9f6a9ad420bf75684807e0b2a/source/qre/src/trace/instruction_ids.rs"}
+    ]
+  },
+  "sources": [
+    {"id": "logical-counts", "description": "Supplied logical-operation and gate-count table", "sha256": "005b60588ccfec0b8ce8bc31d84c7a0a43b7856dc8bd678bb650e59a330a1f6c"},
+    {"id": "qubit-counts", "description": "Supplied logical/physical qubit table and Clifford-rounding assumption", "sha256": "d73ef99ff47850daf00dfdecfd7e0f5245b5835d7b278407c330075122240b3f"},
+    {"id": "physical-counts", "description": "Supplied physical-operation table, explicitly w/o move", "sha256": "08e2bf6eabbb03f15889639c51a5fa61ec1b50871710836d09ce9912461e564e"},
+    {"id": "roadmap", "description": "Supplied Application Roadmap and Progress diagram", "sha256": "f76c0f0eef3f28ca542a3fa33dc5922517d505fa47898c396da763cf32c99ce7"}
+  ],
+  "workloads": [
+    {
+      "id": "1a", "name": "Spin Dynamics Floquet-3x3", "shortName": "Floquet 3x3", "system": 1,
+      "snapshots": [{
+        "id": "source-1a-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "638", "physicalOps": "324305", "nonClifford": "132", "clifford1": "254", "clifford2": "252", "logicalQubits": "9", "physicalQubits": "220"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "1b", "name": "Spin Dynamics Floquet-4x3", "shortName": "Floquet 4x3", "system": 1,
+      "snapshots": [{
+        "id": "source-1b-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "834", "physicalOps": "338559", "nonClifford": "172", "clifford1": "332", "clifford2": "330", "logicalQubits": "12", "physicalQubits": "240"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "2", "name": "Lasers (Dicke superradiance)", "shortName": "Lasers (Dicke)", "system": 2,
+      "snapshots": [{
+        "id": "source-2-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "395", "physicalOps": "109357", "nonClifford": "60", "clifford1": "171", "clifford2": "164", "logicalQubits": "4", "physicalQubits": "100"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "3a", "name": "IQPE extended Hubbard Ethylene", "shortName": "Hubbard Ethylene", "system": 3,
+      "snapshots": [{
+        "id": "source-3a-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "405", "physicalOps": "167655", "nonClifford": "109", "clifford1": "108", "clifford2": "188", "logicalQubits": "5", "physicalQubits": "100"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "3b", "name": "IQPE extended Hubbard Cyclobutadiene", "shortName": "Hubbard Cyclobutadiene", "system": 3,
+      "snapshots": [{
+        "id": "source-3b-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "1054", "physicalOps": "492166", "nonClifford": "278", "clifford1": "185", "clifford2": "591", "logicalQubits": "9", "physicalQubits": "220"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "4a", "name": "IQPE H2", "shortName": "IQPE H2", "system": 4,
+      "snapshots": [{
+        "id": "source-4a-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "580", "physicalOps": "185312", "nonClifford": "113", "clifford1": "207", "clifford2": "260", "logicalQubits": "5", "physicalQubits": "140"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "4b", "name": "IQPE LiH", "shortName": "IQPE LiH", "system": 4,
+      "snapshots": [{
+        "id": "source-4b-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "626", "physicalOps": "191352", "nonClifford": "107", "clifford1": "255", "clifford2": "264", "logicalQubits": "5", "physicalQubits": "140"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    },
+    {
+      "id": "4c", "name": "IQPE N2", "shortName": "IQPE N2", "system": 4,
+      "snapshots": [{
+        "id": "source-4c-v1", "asOf": null, "revision": 0,
+        "metrics": {"logicalOps": "6232", "physicalOps": "1698744", "nonClifford": "742", "clifford1": "2631", "clifford2": "2859", "logicalQubits": "9", "physicalQubits": "220"},
+        "config": "clifford-rounded-no-move", "caveat": "Clifford-rounded emulator: non-Clifford angles rounded to the nearest pi/2 multiple. Physical operations are reported w/o move; the exact counter filter is not supplied.",
+        "reason": "Initial supplied snapshot. No earlier estimates or estimate date were supplied.", "owner": "", "source": "logical-counts; qubit-counts; physical-counts",
+        "maturity": "Unspecified", "local": false, "savedAt": null,
+        "context": {"targetPhysicalQubits": "", "targetWindow": "", "targetConfig": "", "runtimeHours": "", "runtimeLowHours": "", "runtimeHighHours": "", "timingModel": "", "cadenceDays": "", "gateBasisConfirmed": false, "gateBasis": "Source circuit categories sum to logical operations; gate-share taxonomy has not been explicitly confirmed by engineering."}
+      }]
+    }
+  ],
+  "updates": [],
+  "milestones": [],
+  "roadmap": [
+    {"id": "specification", "title": "Application specification", "status": "Evidence supplied", "note": "Eight application candidates are identified in the supplied tables. Specification sign-off was not supplied.", "owner": "", "window": "", "revisions": []},
+    {"id": "qubits", "title": "Will it fit? (qubit count)", "status": "Evidence supplied", "note": "Logical and physical qubit counts are supplied for all eight candidates. Hardware fit is not implied without a capacity/configuration match.", "owner": "", "window": "", "revisions": []},
+    {"id": "operations", "title": "Will it run? (logical operations)", "status": "Evidence supplied", "note": "Logical counts and physical operations w/o move are supplied. Clifford-rounded emulator runs are reported; this is not a runtime or full-circuit correctness claim.", "owner": "", "window": "", "revisions": []},
+    {"id": "correctness", "title": "Will it give the right answer?", "status": "Not assessed", "note": "No validation result for the original non-Clifford applications was supplied.", "owner": "", "window": "", "revisions": []},
+    {"id": "hardware", "title": "Hardware demonstration", "status": "Not assessed", "note": "No hardware demonstration result was supplied.", "owner": "", "window": "", "revisions": []}
+  ]
+}
