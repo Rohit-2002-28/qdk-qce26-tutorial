@@ -1,14 +1,15 @@
 <!doctype html>
 <!--
-THESIS: A resource ledger with a shared briefing, not a wall of KPI cards.
+THESIS: Select a candidate and read two logical-resource trends, without a report
+competing for the first screen.
 OWN-WORLD: White working surfaces, graphite text, cool gray rules, one blue accent,
 Segoe UI, exact tabular numbers, native controls, and restrained rectangular forms.
-STORY: Read the exceptions and next action, inspect a dated candidate, and share
-that exact published snapshot. Engineers maintain counts and one written briefing.
-FIRST VIEWPORT: A compact briefing precedes the ledger and selected candidate;
-the physical target and next action precede both logical-resource time trends.
-FORM: Extend the incumbent master/detail workspace. Separate comparison and
-engineering tabs keep additional plots and writing tools out of the overview.
+STORY: Choose a candidate, read its dated counts and compatible changes, then
+inspect details or share the published snapshot when needed.
+FIRST VIEWPORT: Compact system/candidate controls and a quiet metadata line lead
+directly to two number/change/chart pairs. One disclosure contains secondary data.
+FORM: Distill the existing blue-and-white workspace. Written briefing and plans
+remain in Updates & outlook; comparisons and editing retain their own tabs.
 -->
 <html lang="en">
 <head>
@@ -111,7 +112,7 @@ main { max-width: 1536px; margin: auto; padding: 28px 36px 36px; min-height: cal
 .heading-controls { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .field-inline { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .field-inline select { min-height: 36px; font-size: 13px; min-width: 130px; }
-#system-filter {
+#system-filter, .inset-select {
   appearance: none;
   padding-right: 36px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%23576879' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -119,88 +120,63 @@ main { max-width: 1536px; margin: auto; padding: 28px 36px 36px; min-height: cal
   background-position: right 12px center;
   background-size: 14px 14px;
 }
-.overview-layout { display: grid; grid-template-columns: 342px minmax(0, 1fr); align-items: start; gap: 24px; }
-.overview-layout > div { min-width: 0; }
-.ledger, .detail-sheet, .sheet { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); min-width: 0; }
-.ledger-heading { padding: 19px 18px 13px; display: flex; align-items: center; justify-content: space-between; }
-.ledger-heading h2 { font-size: 16px; margin: 0; }
+.sheet, .overview-surface { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); min-width: 0; }
+.overview-page { max-width: 1200px; margin: auto; }
+.overview-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+.overview-heading h1 { margin: 0; }
+.overview-selection { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+.candidate-controls { display: grid; grid-template-columns: minmax(110px, 150px) minmax(135px, 200px); gap: 14px; min-width: 0; }
+.candidate-controls .field { font-size: 13px; }
+.estimate-meta { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.estimate-meta strong { font-weight: 600; color: var(--ink); }
+.snapshot-picker { position: relative; flex-shrink: 0; }
+.snapshot-picker > summary { color: var(--blue); font-size: 13px; cursor: pointer; padding: 8px 0; }
+.snapshot-options { position: absolute; z-index: 5; top: 100%; right: 0; width: min(370px, calc(100vw - 32px)); background: white; border: 1px solid var(--rule-strong); border-radius: 6px; box-shadow: var(--shadow); padding: 16px; }
+.snapshot-options .text-button { font-size: 13px; margin-top: 8px; }
+.overview-notice { margin: 0 0 16px; padding: 9px 12px; background: var(--amber-soft); border: 1px solid #e7d8b7; border-radius: 5px; color: var(--amber); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.overview-notice a { white-space: nowrap; }
 .count-label { font-size: 12px; color: var(--muted); }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th { text-align: left; font-weight: 600; }
-.ledger-table thead th { background: #f7f9fc; color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1.5; padding: 10px 12px; border-block: 1px solid var(--rule); vertical-align: bottom; }
-.ledger-table thead th:first-child { padding-left: 18px; width: 43%; }
-.ledger-table thead th:not(:first-child), .ledger-table td { text-align: right; }
-.ledger-table tbody th, .ledger-table tbody td { padding: 11px 12px; border-bottom: 1px solid #edf1f5; }
-.ledger-table tbody th { padding-left: 18px; font-weight: 500; }
-.ledger-table tbody tr { cursor: pointer; }
-.ledger-table tbody tr:hover { background: var(--blue-light); }
-.ledger-table tbody tr.is-selected { background: var(--blue-soft); }
-.ledger-table tbody tr.is-selected .workload-button { color: var(--blue-deep); font-weight: 700; }
-.ledger-table td { font-size: 14px; font-weight: 600; white-space: nowrap; }
 .workload-button { padding: 2px 0; background: transparent; border: 0; color: var(--ink); font-weight: 600; text-align: left; }
 .workload-date { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 400; }
-.workload-date .basis-mark { color: var(--amber); margin-left: 4px; }
-.ledger-note { padding: 13px 18px 15px; color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0; }
-.ledger-footnote { margin: 12px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.detail-head { padding: 20px 24px 16px; display: flex; gap: 18px; align-items: start; justify-content: space-between; }
-.detail-head h2 { font-size: 23px; margin-bottom: 4px; }
-.detail-head .system-name { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 10px; letter-spacing: 0; }
-.detail-head p { font-size: 12px; color: var(--muted); margin: 0; }
-.detail-head .button { margin-top: 2px; }
-.assumption-notice { margin: 0 24px 0; border: 1px solid #d9e2ec; border-radius: 5px; background: #f7f9fc; color: #435970; padding: 9px 12px; font-size: 12px; line-height: 1.55; }
-.assumption-notice.warning { background: var(--amber-soft); border-color: #e7d8b7; color: #79541e; }
-.assumption-notice strong { font-weight: 650; }
-.assumption-notice svg { vertical-align: -3px; margin-right: 5px; }
-.trend-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin: 20px 24px 0; gap: 0; }
-.trend { min-width: 0; padding-right: 13px; }
-.trend + .trend { border-left: 1px solid var(--rule); padding-left: 13px; padding-right: 0; }
-.metric-label { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-.metric-value { font-size: 34px; line-height: 1.22; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; font-weight: 650; }
-.delta { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; color: var(--muted); min-height: 21px; }
+.trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 24px 24px 0; gap: 40px; }
+.trend { min-width: 0; }
+.metric-label { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+.metric-value { font-size: 36px; line-height: 1.22; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; font-weight: 650; overflow-wrap: anywhere; }
+.delta { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 13px; color: var(--muted); min-height: 21px; }
 .delta strong { font-weight: 600; color: var(--blue-deep); }
 .delta strong.increase { color: var(--blue-deep); }
 .delta strong.unavailable { color: var(--muted); }
 .chart { display: block; width: 100%; height: auto; margin: 9px 0 0; overflow: visible; }
-.chart text { font-family: inherit; font-size: 12px; fill: var(--subtle); }
+.chart text { font-family: inherit; font-size: 13px; fill: var(--subtle); }
 .chart .chart-grid { stroke: #e7edf3; stroke-width: 1; }
 .chart .current-path { stroke: var(--blue); stroke-width: 2.6; fill: none; stroke-linejoin: round; stroke-linecap: round; }
 .chart .old-path { stroke: #a7b6c5; stroke-width: 2; fill: none; }
 .chart .boundary { stroke: #b98b44; stroke-dasharray: 3 4; stroke-width: 1; }
 .chart .chart-point { fill: white; stroke: var(--blue); stroke-width: 2; }
 .chart .chart-point.old-point { stroke: #a7b6c5; }
-.chart .chart-point:last-of-type { fill: var(--blue); }
+.chart .chart-point.selected-point { fill: var(--blue); }
 .chart circle:focus-visible { stroke: #072b50; stroke-width: 4; outline: none; }
-.chart-caption { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -3px 0 11px; min-height: 16px; }
-.overhead { border-top: 1px solid var(--rule); padding: 12px 0 3px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.overhead span { font-size: 12px; color: var(--muted); }
-.overhead strong { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.overhead .ratio-note { display: block; font-size: 12px; color: var(--amber); margin-top: 3px; }
-.mobile-candidate { display: none; }
-.change-note { margin: 18px 24px 20px; padding-top: 15px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--muted); line-height: 1.55; }
-.change-note strong { color: var(--ink); font-weight: 600; margin-right: 5px; }
-.context-heading { border-top: 1px solid var(--rule); margin: 0; padding: 17px 24px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.context-heading h3 { margin: 0; font-size: 14px; }
-.context-heading .text-button { font-size: 12px; }
-.context-rail { display: grid; grid-template-columns: 1.15fr 0.9fr 1fr; padding: 14px 24px 18px; gap: 20px; }
-.context-item { min-width: 0; }
-.context-item + .context-item { border-left: 1px solid var(--rule); padding-left: 20px; }
-.context-item h3 { color: var(--muted); font-size: 12px; font-weight: 600; margin-bottom: 9px; }
-.context-value { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.3; font-variant-numeric: tabular-nums; }
-.context-value .unit { font-size: 14px; font-weight: 500; color: var(--muted); }
-.context-item p { font-size: 12px; line-height: 1.6; color: var(--muted); margin: 5px 0 0; }
-.context-item .target-subline { color: var(--blue-deep); font-weight: 600; }
-.context-item .context-source { color: var(--muted); font-size: 12px; }
-.gate-bar { display: flex; height: 9px; border-radius: 2px; overflow: hidden; margin: 10px 0 6px; background: #edf2f7; }
-.gate-bar span:nth-child(1) { background: #185b98; }
-.gate-bar span:nth-child(2) { background: #85add3; }
-.gate-bar span:nth-child(3) { background: #d2e1ee; }
-.gate-legend { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.source-disclosure { border-top: 1px solid var(--rule); }
-.source-disclosure > summary { padding: 13px 24px; color: var(--blue); font-size: 12px; font-weight: 550; cursor: pointer; }
-.source-disclosure[open] > summary { border-bottom: 1px solid var(--rule); }
-.provenance-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; padding: 20px 24px; margin: 0; }
-.provenance-grid dt { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-.provenance-grid dd { font-size: 12px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.chart-caption { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 12px 24px; }
+.chart-empty { min-height: 220px; display: grid; align-items: center; color: var(--muted); font-size: 14px; }
+.snapshot-note { margin: 12px 24px 20px; color: var(--muted); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.snapshot-note strong { color: var(--ink); font-weight: 600; }
+.snapshot-note .text-button { padding: 0; }
+.resource-details { border-top: 1px solid var(--rule); }
+.resource-details > summary { padding: 16px 24px; color: var(--blue); font-size: 14px; cursor: pointer; }
+.resource-details-body { padding: 8px 24px 24px; }
+.resource-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 40px; margin-bottom: 24px; }
+.resource-details p, .resource-facts { font-size: 13px; line-height: 1.65; color: var(--muted); overflow-wrap: anywhere; }
+.resource-details p { margin-bottom: 10px; }
+.resource-details h3 { font-size: 15px; margin-bottom: 10px; }
+.resource-facts { margin: 0; }
+.resource-facts > div + div { margin-top: 12px; }
+.resource-facts dt { font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+.resource-facts dd { margin: 0; }
+.overhead { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap; margin-top: 12px; }
+.overhead strong { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.overhead .ratio-note { flex-basis: 100%; color: var(--amber); }
 .input-badge { display: inline-flex; align-items: center; padding: 3px 6px; border: 1px solid #cedbe8; border-radius: 4px; font-size: 12px; line-height: 1.2; font-weight: 500; color: #435e78; background: #f7faff; white-space: nowrap; }
 .input-badge + .input-badge { margin-left: 5px; }
 .support-caption { color: var(--muted); font-size: 12px; margin: 12px 0 0; line-height: 1.6; }
@@ -342,46 +318,9 @@ dialog p { color: var(--muted); font-size: 13px; }
 .preview-caption { font-size: 13px; }
 .workload-button { text-decoration: none; display: inline-block; }
 .workload-button:hover { text-decoration: underline; }
-.workload-date, .ledger-note, .ledger-footnote, .delta, .assumption-notice,
-.chart-caption, .overhead span, .context-item p, .provenance-grid dd,
-.detail-head p, .update-meta, .update-meta .workload-link, .update-list p,
+.workload-date, .update-meta, .update-meta .workload-link, .update-list p,
 .milestones p, .milestone-status, .outlook-note, .field, .field .field-hint,
 .section-description, .inline-message { font-size: 13px; }
-.attention-cue { display: block; margin-top: 5px; font-size: 12px; line-height: 1.4; font-weight: 500; color: var(--amber); white-space: normal; }
-.briefing { margin-bottom: 20px; padding: 12px 20px; border-block: 1px solid var(--rule); background: white; }
-.briefing-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.briefing h2 { font-size: 16px; margin: 0; }
-.briefing-head a { font-size: 13px; }
-.briefing-list { padding: 0; list-style: none; margin: 0; }
-.briefing-list li { display: flex; flex-wrap: wrap; gap: 3px 9px; align-items: baseline; padding-block: 3px; font-size: 13px; line-height: 1.5; }
-.briefing-list .briefing-scope { min-width: 53px; font-weight: 600; color: var(--muted); }
-.briefing-list .briefing-owner { color: var(--muted); }
-.briefing-list .briefing-request { flex-basis: 100%; color: var(--ink); }
-.briefing-list .briefing-request strong { color: var(--amber); }
-.detail-head { align-items: start; flex-wrap: wrap; padding-bottom: 12px; }
-.snapshot-choice { max-width: 100%; font-size: 13px; }
-.snapshot-choice select { min-width: 0; max-width: 100%; font-size: 13px; }
-.estimate-status { display: flex; gap: 6px 10px; flex-wrap: wrap; margin-top: 7px; font-size: 13px; color: var(--muted); }
-.estimate-status strong { color: var(--ink); font-weight: 600; }
-.primary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 24px 16px; gap: 24px; }
-.primary-metrics .metric-value { overflow-wrap: anywhere; }
-.decision-context { padding: 13px 24px; border-block: 1px solid var(--rule); background: #f7f9fc; }
-.decision-context h3 { margin: 0 0 5px; font-size: 14px; }
-.decision-context p { font-size: 13px; line-height: 1.55; margin: 5px 0 0; max-width: 80ch; }
-.decision-context .goal-line { font-variant-numeric: tabular-nums; }
-.decision-context .next-step { margin-top: 9px; }
-.decision-context .freshness-line { color: var(--muted); }
-.decision-context .request-line { color: var(--ink); }
-.decision-context .request-line strong { color: var(--amber); }
-.other-plans { margin-top: 8px; font-size: 13px; }
-.other-plans summary { cursor: pointer; color: var(--blue); }
-.assumption-notice { margin-top: 14px; }
-.technical-details { margin-top: 18px; border-top: 1px solid var(--rule); }
-.technical-details > summary { padding: 14px 24px; cursor: pointer; color: var(--blue); font-weight: 600; font-size: 13px; }
-.technical-details .context-rail { grid-template-columns: 1fr 1fr; }
-.chart text { font-size: 13px; }
-.chart-caption { margin-top: 4px; line-height: 1.6; }
-.overview-links { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 24px 16px; font-size: 13px; }
 .request-note { border-top: 1px solid var(--rule); padding-top: 10px; margin-top: 10px !important; color: var(--ink) !important; }
 .update-list h3::before { display: none; }
 .update-list p { margin-left: 0; }
@@ -460,43 +399,13 @@ dialog p { color: var(--muted); font-size: 13px; }
 }
 @media (max-width: 900px) {
   .writing-layout { grid-template-columns: 1fr; }
-  .overview-heading .heading-controls { display: flex; }
-}
-@media (min-width: 1650px) {
-  .overview-layout { grid-template-columns: 360px minmax(0, 1fr); gap: 28px; }
+  .overview-selection { align-items: start; flex-direction: column; gap: 12px; }
 }
 @media (max-width: 1150px) {
   .preview-bar-inner, .header-inner, .nav-inner { padding-inline: 24px; }
   main { padding-inline: 24px; }
-  .overview-layout { grid-template-columns: 290px minmax(0, 1fr); gap: 18px; }
-  .ledger-table thead th, .ledger-table tbody th, .ledger-table tbody td { padding-inline: 10px; }
-  .ledger-table td { font-size: 13px; }
-  .detail-head { padding-inline: 20px; }
-  .detail-head .system-name { display: block; margin: 4px 0 0; font-size: 12px; }
-  .assumption-notice { margin-inline: 20px; }
-  .trend-grid { margin-inline: 20px; }
-  .trend { padding-right: 9px; }
-  .trend + .trend { padding-left: 9px; }
-  .metric-value { font-size: 29px; }
-  .overhead { display: block; }
-  .overhead span { display: block; margin-bottom: 4px; }
-  .context-rail { padding-inline: 20px; gap: 15px; }
-  .context-item + .context-item { padding-left: 15px; }
-  .context-value { font-size: 21px; }
-  .context-heading { padding-inline: 20px; }
-  .context-heading .text-button { font-size: 12px; }
 }
 @media (max-width: 900px) {
-  .overview-layout { grid-template-columns: minmax(0, 1fr); }
-  .overview-layout .ledger-section { display: none; }
-  .mobile-candidate { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 13px 16px; background: white; border: 1px solid var(--rule); border-radius: 7px; }
-  .mobile-candidate > span { font-size: 12px; font-weight: 600; }
-  .mobile-candidate select { min-width: 0; width: 0; flex: 1; }
-  .ledger-footnote { display: none; }
-  .detail-head .system-name { display: inline; margin-left: 10px; }
-  .metric-value { font-size: 34px; }
-  .overhead { display: flex; }
-  .context-heading .text-button { font-size: 12px; }
   .updates-layout { grid-template-columns: 1fr; }
   .context-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .context-fields .span-two { grid-column: 1 / -1; }
@@ -524,37 +433,18 @@ dialog p { color: var(--muted); font-size: 13px; }
   .page-heading p { font-size: 12px; max-width: 45ch; }
   .heading-controls { width: 100%; flex-wrap: wrap; }
   .heading-controls .field-inline { width: 100%; justify-content: space-between; }
-  .overview-layout { gap: 18px; }
-  .overview-layout .ledger-section { max-height: 277px; }
-  .ledger-heading { padding: 13px 14px 11px; }
-  .ledger-heading h2 { font-size: 15px; }
-  .ledger-table tbody th, .ledger-table thead th:first-child { padding-left: 14px; }
-  .ledger-table tbody th, .ledger-table tbody td { padding-block: 8px; }
-  .ledger-table thead th { padding-block: 7px; }
-  .detail-head { padding: 17px 16px 13px; gap: 10px; }
-  .detail-head h2 { font-size: 21px; }
-  .detail-head .system-name { display: block; margin: 3px 0 0; font-size: 12px; }
-  .detail-head .button { font-size: 12px; }
-  .detail-head p { font-size: 12px; }
-  .assumption-notice { margin-inline: 16px; font-size: 12px; padding: 9px 10px; }
-  .trend-grid { grid-template-columns: 1fr; margin: 19px 16px 0; gap: 20px; }
-  .trend { padding-right: 0; }
-  .trend + .trend { border-left: 0; border-top: 1px solid var(--rule); padding: 20px 0 0; }
-  .chart { max-height: 230px; }
-  .chart-caption { margin-top: 0; }
-  .overhead { padding-top: 10px; }
-  .change-note { margin-inline: 16px; }
-  .context-heading { padding-inline: 16px; flex-wrap: wrap; gap: 2px; }
-  .context-rail { grid-template-columns: 1fr; padding: 12px 16px 18px; gap: 18px; }
-  .context-item + .context-item { border-left: 0; border-top: 1px solid var(--rule); padding: 15px 0 0; }
-  .context-item { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: start; }
-  .context-item h3 { grid-column: 1; grid-row: 1; font-size: 12px; margin-top: 3px; }
-  .context-item .context-value { grid-column: 2; grid-row: 1; text-align: right; font-size: 23px; }
-  .context-item > p, .context-item .gate-bar, .context-item .gate-legend { grid-column: 1 / -1; }
-  .context-item > p { font-size: 12px; }
-  .context-item .gate-bar { margin-top: 10px; }
-  .source-disclosure > summary { padding: 14px 16px; }
-  .provenance-grid { grid-template-columns: 1fr; padding-inline: 16px; gap: 16px; }
+  .overview-heading { gap: 10px; margin-bottom: 16px; }
+  .overview-heading h1 { font-size: 22px; }
+  .overview-selection { margin-bottom: 18px; }
+  .candidate-controls { grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr); width: 100%; gap: 12px; }
+  .candidate-controls select { min-width: 0; }
+  .trend-grid { grid-template-columns: minmax(0, 1fr); padding: 18px 16px 0; gap: 24px; }
+  .metric-value { font-size: 32px; }
+  .chart-empty { min-height: 170px; }
+  .chart-caption, .snapshot-note { margin-inline: 16px; }
+  .resource-details > summary { padding-inline: 16px; }
+  .resource-details-body { padding-inline: 16px; }
+  .resource-detail-grid { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .sheet-heading { padding: 17px 16px; align-items: start; flex-wrap: wrap; gap: 14px; }
   .sheet-heading h2 { font-size: 16px; }
   .table-tools { gap: 14px; font-size: 12px; }
@@ -588,7 +478,7 @@ dialog p { color: var(--muted); font-size: 13px; }
   .app-footer > span { max-width: 245px; }
 }
 @media (forced-colors: active) {
-  #system-filter { appearance: auto; background-image: none; }
+  #system-filter, .inset-select { appearance: auto; background-image: none; }
 }
 @media (max-width: 600px) {
   .preview-bar-inner { gap: 7px 12px; font-size: 12px; }
@@ -605,25 +495,7 @@ dialog p { color: var(--muted); font-size: 13px; }
   #view-description { display: none; }
   .page-heading { gap: 10px; margin-bottom: 14px; }
   .page-heading p { font-size: 13px; }
-  .briefing { padding: 12px 14px; margin-bottom: 16px; }
-  .briefing-head { flex-wrap: wrap; gap: 3px 12px; }
-  .briefing-list li { font-size: 13px; padding-block: 3px; }
-  .briefing-owner { display: none; }
-  .briefing-list .briefing-request { font-size: 12px; }
-  .mobile-candidate { padding-block: 10px; }
-  .detail-head { gap: 9px; }
-  .detail-head p, .detail-head .system-name, .assumption-notice,
-  .context-item > p, .table-tools, .editor-toolbar p, .app-footer { font-size: 13px; }
-  .detail-head .system-name { display: inline; margin-left: 10px; }
-  .snapshot-choice { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
-  .snapshot-choice select { flex: 1; width: 100%; }
-  .decision-context { padding: 12px 16px; }
-  .primary-metrics { margin-inline: 16px; gap: 14px; }
-  .primary-metrics .metric-value { font-size: 30px; }
-  .decision-context p { font-size: 13px; }
-  .technical-details > summary { padding-inline: 16px; }
-  .technical-details .context-rail { grid-template-columns: 1fr; }
-  .overview-links { margin-inline: 16px; }
+  .table-tools, .editor-toolbar p, .app-footer { font-size: 13px; }
   .milestones li { grid-template-columns: 1fr; gap: 8px; }
   .milestone-date strong, .milestone-date span { display: inline; font-size: 13px; }
   .milestone-date span { margin-left: 8px; }
@@ -643,9 +515,7 @@ dialog p { color: var(--muted); font-size: 13px; }
 @media print {
   .preview-explanation, .header-actions, .guide-link, .app-footer, .save-bar { display: none; }
   main { padding: 20px 0; }
-  .overview-layout { grid-template-columns: 300px 1fr; }
-  .ledger-section { max-height: none !important; overflow: visible !important; }
-  .sheet, .detail-sheet, .ledger { break-inside: avoid; }
+  .sheet, .overview-surface { break-inside: avoid; }
 }
 </style>
 </head>
@@ -1017,13 +887,13 @@ dialog p { color: var(--muted); font-size: 13px; }
   function changeMarkup(item, key) {
     const selected = selectedSnapshot(item);
     const previous = previousComparable(item);
-    if (!previous) return '<div class="delta"><strong class="unavailable">No comparable earlier estimate</strong></div>';
+    if (!previous) return '<div class="delta"><strong class="unavailable">Change unavailable</strong></div>';
     if (!isCount(previous.metrics[key]) || !isCount(selected.metrics[key])) return '<div class="delta">Comparison unavailable: a count is missing.</div>';
     const before = BigInt(previous.metrics[key]);
     const difference = BigInt(selected.metrics[key]) - before;
     if (before === 0n) return `<div class="delta"><strong class="unavailable">Percentage unavailable: previous count is zero</strong></div>`;
     if (difference === 0n) return `<div class="delta"><strong>Unchanged</strong><span>vs ${dateLabel(previous.asOf, true)}</span></div>`;
-    return `<div class="delta"><strong class="${difference > 0n ? "increase" : ""}">${difference > 0n ? "&uarr;" : "&darr;"} ${percentage(difference < 0n ? -difference : difference, before)} ${difference > 0n ? "higher" : "lower"}</strong><span>vs ${dateLabel(previous.asOf, true)} &middot; same assumptions</span></div>`;
+    return `<div class="delta"><strong class="${difference > 0n ? "increase" : ""}">${difference > 0n ? "&uarr;" : "&darr;"} ${percentage(difference < 0n ? -difference : difference, before)} ${difference > 0n ? "higher" : "lower"}</strong><span>vs ${dateLabel(previous.asOf, true)}</span></div>`;
   }
 
   function gateShare(snapshot) {
@@ -1069,33 +939,21 @@ dialog p { color: var(--muted); font-size: 13px; }
     return `Next estimate expected ${dateLabel(due.toISOString().slice(0, 10))} (${snapshot.context.cadenceDays}-day engineer-set cadence).`;
   }
 
-  function attention(item) {
-    const snapshot = latest(item);
-    const cues = [];
-    if (activeUpdates().some(update => update.requestKind && appliesTo(update.scope, item))) cues.push("Action requested");
-    const days = (dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000;
-    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) cues.push("Update overdue");
-    if (!chartSnapshots(item, snapshot).some(row => row.asOf < snapshot.asOf && row.config === snapshot.config)) cues.push("New comparison basis");
-    return cues.join(" / ");
-  }
-
   function contentWidth() {
     const style = getComputedStyle(main);
     return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   }
 
   function trendWidth() {
-    let width = contentWidth();
-    if (window.innerWidth > 900) width -= window.innerWidth > 1650 ? 388 : window.innerWidth > 1150 ? 366 : 308;
-    width -= window.innerWidth <= 600 ? 34 : window.innerWidth <= 1150 ? 42 : 50;
-    return Math.max(240, Math.floor(window.innerWidth <= 600 ? width : (width - 28) / 2));
+    const width = Math.min(contentWidth(), 1200) - (window.innerWidth <= 600 ? 34 : 50);
+    return Math.max(220, Math.floor(window.innerWidth <= 600 ? width : (width - 40) / 2));
   }
 
   function chart(item, key, label) {
     const all = chartSnapshots(item);
     const snapshots = all.filter(row => isCount(row.metrics[key]));
-    if (!snapshots.length) return '<p class="chart-caption">No counts supplied for this trend.</p>';
-    const width = trendWidth(), height = 190, left = 62, right = 18, top = 20, bottom = 35;
+    if (!snapshots.length) return '<p class="chart-empty">No counts supplied for this trend.</p>';
+    const width = trendWidth(), height = window.innerWidth <= 600 ? 170 : 220, left = 62, right = 18, top = 20, bottom = 35;
     const plotWidth = width - left - right, plotHeight = height - top - bottom;
     const rawMax = snapshots.reduce((max, row) => BigInt(row.metrics[key]) > max ? BigInt(row.metrics[key]) : max, 1n);
     const magnitude = 10n ** BigInt(rawMax.toString().length - 1);
@@ -1105,7 +963,7 @@ dialog p { color: var(--muted); font-size: 13px; }
     const x = row => snapshots.length === 1 ? left + plotWidth / 2
       : left + (dateValue(row.asOf) - firstDate) / (lastDate - firstDate) * plotWidth;
     const y = row => top + plotHeight * (1 - Number(BigInt(row.metrics[key]) * 1000000n / maximum) / 1000000);
-    const current = snapshots.at(-1);
+    const current = selectedSnapshot(item), lastAvailable = snapshots.at(-1);
     const groups = [];
     for (const row of snapshots) {
       if (!groups.length || groups.at(-1)[0].config !== row.config || all.indexOf(row) !== all.indexOf(groups.at(-1).at(-1)) + 1) groups.push([]);
@@ -1122,45 +980,26 @@ dialog p { color: var(--muted); font-size: 13px; }
       return `<line class="boundary" x1="${abscissa}" x2="${abscissa}" y1="${top - 4}" y2="${height - bottom + 4}"><title>Assumptions changed by ${dateLabel(row.asOf)}</title></line>`;
     }).join("");
     const paths = groups.map(rows => `<path class="${rows[0].config === current.config ? "current-path" : "old-path"}" d="${rows.map((row, index) => `${index === 0 ? "M" : "L"}${x(row).toFixed(2)},${y(row).toFixed(2)}`).join(" ")}"/>`).join("");
-    const points = snapshots.map(row => `<circle class="chart-point${row.config !== current.config ? " old-point" : ""}" cx="${x(row)}" cy="${y(row)}" r="${row === current ? 4.3 : 3}"><title>${dateLabel(row.asOf)}: ${group(row.metrics[key])}; ${escape(row.config)}</title></circle>`).join("");
+    const points = snapshots.map(row => `<circle class="chart-point${row.config !== current.config ? " old-point" : ""}${row === current ? " selected-point" : ""}" cx="${x(row)}" cy="${y(row)}" r="${row === current ? 4.3 : 3}"><title>${dateLabel(row.asOf)}: ${group(row.metrics[key])}; ${escape(row.config)}</title></circle>`).join("");
     const dateTicks = snapshots.filter((_, index) => index === 0 || index === snapshots.length - 1 || (width > 390 && index === Math.floor(snapshots.length / 2)));
-    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${row === snapshots[0] ? "start" : row === current ? "end" : "middle"}">${dateLabel(row.asOf, true)}</text>`).join("");
+    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${row === snapshots[0] ? "start" : row === lastAvailable ? "end" : "middle"}">${dateLabel(row.asOf, true)}</text>`).join("");
     const chartId = `chart-${key}`;
-    const currentGroup = groups.at(-1);
-    const shadeEnd = groups.length > 1 ? (x(currentGroup[0]) + x(snapshots[snapshots.indexOf(currentGroup[0]) - 1])) / 2 : left;
-    const shade = groups.length > 1 ? `<rect x="${left}" y="${top}" width="${shadeEnd - left}" height="${plotHeight}" fill="#f6f8fa"/>` : "";
-    const caption = snapshots.length === 1 ? "One available snapshot. Another estimate is needed to show a trend."
-      : groups.length > 1 ? "Gray: earlier assumptions. The line breaks when assumptions change."
-        : `${snapshots.length} dated snapshots &middot; same illustrative assumptions.`;
-    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(item.id)}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} dated estimates. Latest available value ${group(current.metrics[key])} on ${dateLabel(current.asOf)}. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${shade}${grid}${boundaries}${paths}${points}${ticks}</svg><p class="chart-caption">${caption}${snapshots.length !== all.length ? " Missing counts are omitted; gaps are not interpolated." : ""}</p>`;
+    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(item.id)}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} dated estimates. Latest available value ${group(lastAvailable.metrics[key])} on ${dateLabel(lastAvailable.asOf)}. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${grid}${boundaries}${paths}${points}${ticks}</svg>`;
   }
 
   function provenance(snapshot) {
     const savedAt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Los_Angeles" }).format(new Date(snapshot.savedAt));
-    return `<details class="source-disclosure"><summary>All seven exact counts in this snapshot</summary><div class="table-scroll" tabindex="0" role="region" aria-label="Selected snapshot counts; scroll for all seven metrics"><table class="data-table"><thead><tr>${fields.map(field => `<th scope="col">${escape(field.label)}</th>`).join("")}</tr></thead><tbody><tr>${fields.map(field => `<td>${group(snapshot.metrics[field.key])}</td>`).join("")}</tr></tbody></table></div></details>
-      <details class="source-disclosure">
-      <summary>Assumptions, freshness &amp; source</summary>
-      <dl class="provenance-grid">
-        <div><dt>Estimate as of / maturity</dt><dd>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.maturity)}<br>${escape(freshness(snapshot))}</dd></div>
-        <div><dt>Saved separately from the estimate date</dt><dd>${escape(savedAt)} PT<br>${escape(snapshot.owner)}</dd></div>
-        <div><dt>Configuration / caveat</dt><dd>${escape(snapshot.config)}<br>${escape(snapshot.caveat)}</dd></div>
-        <div><dt>Provenance</dt><dd>${escape(snapshot.source)}<br>Fictional run reference; no external source is connected.</dd></div>
-        <div><dt>Runtime basis</dt><dd>${escape(snapshot.context.timingModel || "Timing assumptions not supplied.")}</dd></div>
-        <div><dt>Gate-share denominator</dt><dd>${escape(snapshot.context.gateBasisConfirmed ? snapshot.context.gateBasis : "Unconfirmed. Engineering must establish compatible gate categories before a share is shown.")}</dd></div>
-      </dl>
-    </details>`;
+    return `<section><h3>Assumptions &amp; source</h3><dl class="resource-facts">
+        <div><dt>Configuration / caveat</dt><dd>${escape(snapshot.config)} &mdash; ${escape(snapshot.caveat)}</dd></div>
+        <div><dt>Estimate owner / source</dt><dd>${escape(snapshot.owner)} &middot; ${escape(snapshot.source)}</dd></div>
+        <div><dt>Saved at (not the estimate date)</dt><dd>${escape(savedAt)} PT</dd></div>
+        <div><dt>Reporting cadence</dt><dd>${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}. Relative to the ${dateLabel(DEMO.referenceDate)} demo date.</dd></div>
+      </dl></section>`;
   }
 
   function requestMarkup(update, className = "request-note") {
     if (!update.requestKind) return "";
     return `<p class="${className}"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)} &middot; ${update.requestDue ? `due ${dateLabel(update.requestDue)}` : "due date not supplied"}</p>`;
-  }
-
-  function briefing() {
-    const updates = activeUpdates();
-    return `<section class="briefing" aria-labelledby="briefing-title"><div class="briefing-head"><h2 id="briefing-title">Since the last review</h2><a data-nav href="${escape(urlFor("updates"))}">Read updates &amp; outlook</a></div>
-      ${updates.length ? `<ul class="briefing-list">${updates.map(update => `<li data-briefing-id="${escape(update.id)}"><span class="briefing-scope">${scopeLink(update)}</span><a data-nav href="${escape(urlFor("updates"))}">${escape(update.title)}</a><span class="briefing-owner">${dateLabel(update.date, true)} &middot; ${escape(update.owner)}</span>${update.requestKind ? `<span class="briefing-request"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)}${update.requestDue ? ` &middot; due ${dateLabel(update.requestDue, true)}` : " &middot; due date not supplied"}</span>` : ""}</li>`).join("")}</ul>` : '<p class="section-description">No active briefing bullets. Older updates remain in history.</p>'}
-      </section>`;
   }
 
   function milestoneTarget(milestone) {
@@ -1182,71 +1021,70 @@ dialog p { color: var(--muted); font-size: 13px; }
     return `<span data-target-current="${escape(snapshot.metrics.physicalQubits)}"><strong>${compact(snapshot.metrics.physicalQubits)} physical qubits</strong> ${compactLine ? "now" : "in the selected snapshot"}</span> vs <strong>${context.targetPhysicalQubits ? compact(context.targetPhysicalQubits) : "no supplied"} target</strong>${context.targetDate ? ` by ${dateLabel(context.targetDate)}` : ""}. <span data-target-gap>${escape(gap.text)}; ${escape(gap.detail)}</span>`;
   }
 
-  function nextMilestone(item) {
-    return activeMilestones().filter(milestone => milestone.status !== "Done" && appliesTo(milestone.scope, item))
-      .sort((a, b) => (milestoneDate(a) || "9999").localeCompare(milestoneDate(b) || "9999"))[0];
+  function overviewNotice(item, snapshot) {
+    if (!previousComparable(item)) return `<p class="overview-notice">No comparable earlier estimate on <strong>${escape(snapshot.config)}</strong>; cross-version changes are not compared.</p>`;
+    if (snapshot.id !== latest(item).id) return "";
+    const blocker = activeUpdates().find(update => update.requestKind === "Blocker" && appliesTo(update.scope, item))
+      || activeMilestones().find(milestone => milestone.status === "Blocked" && appliesTo(milestone.scope, item));
+    if (blocker) return `<p class="overview-notice"><strong>Blocker recorded:</strong> ${escape(blocker.title)}. <a data-nav href="${escape(urlFor("updates"))}">Read blocker</a></p>`;
+    const days = Math.floor((dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000);
+    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) return `<p class="overview-notice"><strong>Update overdue:</strong> ${days} days old against a ${escape(snapshot.context.cadenceDays)}-day cadence, as of the ${dateLabel(DEMO.referenceDate, true)} demo date.</p>`;
+    if (days < 0) return '<p class="overview-notice">This estimate is future-dated relative to the demo reference date.</p>';
+    return "";
   }
 
-  function decisionContext(item, snapshot) {
-    const milestone = nextMilestone(item);
-    const requests = activeUpdates().filter(update => update.requestKind && appliesTo(update.scope, item));
-    const otherPlans = activeMilestones().filter(plan => plan !== milestone && appliesTo(plan.scope, item));
-    return `<section class="decision-context" aria-label="Goal and next action"><h3>Physical-qubit objective</h3>
-      <p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p>
-      <p class="next-step" data-next-milestone>${milestone ? `<strong>Next milestone:</strong> ${escape(milestone.title)} &middot; ${escape(milestoneWindow(milestone))} &middot; ${escape(milestone.owner)} &middot; ${escape(milestone.status)}. <span>${escape(milestone.outcome)}</span>${milestone.dependencies ? ` <span>Dependency: ${escape(milestone.dependencies)}</span>` : ""}` : "<strong>Next milestone:</strong> Not supplied for this candidate."}</p>
-      ${requests.map(update => requestMarkup(update, "request-line")).join("")}
-      <p class="freshness-line">${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}.</p>
-      ${otherPlans.length ? `<details class="other-plans"><summary>${otherPlans.length} other milestone${otherPlans.length === 1 ? "" : "s"} / linked objectives</summary>${otherPlans.map(plan => `<p data-other-milestone="${escape(plan.id)}"><strong>${escape(plan.title)}</strong> &middot; ${escape(milestoneWindow(plan))} &middot; ${escape(plan.owner)} &middot; ${escape(plan.status)}. ${escape(plan.outcome)}${plan.targetCandidate ? ` Linked future objective: ${targetMarkup(milestoneTarget(plan), true)}` : ""}${plan.dependencies ? ` Dependency: ${escape(plan.dependencies)}` : ""}</p>`).join("")}</details>` : ""}
-      ${snapshot.id !== latest(item).id ? '<p class="freshness-line">Historical snapshot selected. Written plans refer to the latest in-tab data, not a plan captured at that historical date.</p>' : ""}
-      </section>`;
+  function resourceDetails(item, snapshot) {
+    const share = gateShare(snapshot);
+    const opRatio = ratio(snapshot.metrics.physicalOps, snapshot.metrics.logicalOps);
+    const qubitRatio = ratio(snapshot.metrics.physicalQubits, snapshot.metrics.logicalQubits);
+    return `<details class="resource-details" id="resource-details"><summary>Resource details &amp; assumptions</summary>
+      <div class="resource-details-body"><div class="resource-detail-grid">
+        <section><h3>Physical resources &amp; target</h3><p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p><p>Engineer-set objective, not a forecast. Target basis: ${escape(snapshot.context.targetConfig || "not supplied")}.</p>
+          <dl class="resource-facts"><div><dt>Physical operations</dt><dd>${group(snapshot.metrics.physicalOps)}</dd></div></dl>
+          <p class="overhead"><span>Physical operations per logical operation</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong>${opRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalOps", "logicalOps")}</span>` : ""}</p>
+          <p class="overhead"><span>Physical qubits per logical qubit</span><strong>${qubitRatio === null ? "Not available" : `${qubitRatio} : 1`}</strong>${qubitRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalQubits", "logicalQubits")}</span>` : ""}</p><p>Overhead ratios are not runtime speedups.</p>
+        </section>
+        <section><h3>Runtime &amp; gate share</h3><dl class="resource-facts">
+          <div><dt>Estimated runtime</dt><dd>${snapshot.context.runtimeHours ? `${escape(snapshot.context.runtimeHours)} hours` : "Not supplied"}${snapshot.context.runtimeLowHours && snapshot.context.runtimeHighHours ? `; ${escape(snapshot.context.runtimeLowHours)}&ndash;${escape(snapshot.context.runtimeHighHours)} h illustrative range` : "; no range supplied"}. Not a statistical confidence interval.</dd></div>
+          <div><dt>Engineer-supplied timing model</dt><dd>${escape(snapshot.context.timingModel || "Timing assumptions not supplied.")}</dd></div>
+          <div><dt>Non-Clifford share of classified logical gates</dt><dd>${share.text}${share.total > 0n ? `; 1-qubit Clifford ${percentage(snapshot.metrics.clifford1, share.total)}; 2-qubit Clifford ${percentage(snapshot.metrics.clifford2, share.total)}` : ""}</dd></div>
+          <div><dt>Gate-share basis</dt><dd>${escape(snapshot.context.gateBasisConfirmed ? snapshot.context.gateBasis : "Unconfirmed. Engineering must establish compatible gate categories before a share is shown.")}</dd></div>
+        </dl></section>
+        ${provenance(snapshot)}
+        <section id="snapshot-change-note" tabindex="-1"><h3>What changed</h3><p class="written-prose">${escape(snapshot.reason)}</p></section>
+      </div>
+      <h3>All seven exact counts in this snapshot</h3><div class="table-scroll" tabindex="0" role="region" aria-label="Selected snapshot counts; scroll for all seven metrics"><table class="data-table"><thead><tr>${fields.map(field => `<th scope="col">${escape(field.label)}</th>`).join("")}</tr></thead><tbody><tr>${fields.map(field => `<td>${group(snapshot.metrics[field.key])}</td>`).join("")}</tr></tbody></table></div>
+      </div></details>`;
   }
 
   function overview() {
-    const visible = state.workloads.filter(item => state.filter === "all" || String(item.system) === state.filter);
-    const item = workload(state.selected), current = selectedSnapshot(item), share = gateShare(current);
-    const opRatio = ratio(current.metrics.physicalOps, current.metrics.logicalOps);
-    const qubitRatio = ratio(current.metrics.physicalQubits, current.metrics.logicalQubits);
-    const hasBoundary = new Set(chartSnapshots(item).map(row => row.config)).size > 1;
-    const previous = previousComparable(item);
-    const rows = visible.map(entry => {
-      const snapshot = latest(entry);
-      const cue = attention(entry);
-      return `<tr class="${entry.id === state.selected ? "is-selected" : ""}">
-        <th scope="row"><a class="workload-button" data-nav href="${escape(candidateUrl(entry.id, snapshot))}" ${entry.id === state.selected ? 'aria-current="true"' : ""}>${escape(entry.id)}</a><span class="workload-date">${dateLabel(snapshot.asOf, true)}</span>${cue ? `<span class="attention-cue">${escape(cue)}</span>` : ""}</th>
-        <td title="${group(snapshot.metrics.logicalOps)}">${compact(snapshot.metrics.logicalOps)}</td><td title="${group(snapshot.metrics.logicalQubits)}">${compact(snapshot.metrics.logicalQubits)}</td></tr>`;
-    }).join("");
-    return `<div class="page-heading overview-heading"><div><h1>Resource overview</h1><p>Current estimates, what changed, and what comes next.</p></div>
-      <div class="heading-controls"><label class="field-inline" for="system-filter">System<select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${[1, 2, 3, 4].map(system => `<option value="${system}"${state.filter === String(system) ? " selected" : ""}>System ${system}</option>`).join("")}</select></label></div></div>
-      ${briefing()}
-      <div class="overview-layout">
-        <div>
-          <label class="mobile-candidate"><span>Application candidate</span><select id="mobile-workload">${visible.map(entry => `<option value="${escape(entry.id)}"${entry.id === state.selected ? " selected" : ""}>${escape(entry.id)}${attention(entry) ? ` - ${escape(attention(entry))}` : ""}</option>`).join("")}</select></label>
-          <div class="ledger-section"><section class="ledger" aria-labelledby="workloads-title"><div class="ledger-heading"><h2 id="workloads-title">Application candidates</h2><span class="count-label">${visible.length} workloads</span></div>
-            <table class="ledger-table"><thead><tr><th scope="col">Workload / estimate date</th><th scope="col">Logical<br>operations</th><th scope="col">Logical<br>qubits</th></tr></thead><tbody>${rows}</tbody></table>
-            <p class="ledger-note">Select a candidate to explore its history.<br>Independent workloads &mdash; not a combined total.</p>
-          </section></div>
-          <p class="ledger-footnote">K = thousand &middot; M = million &middot; B = billion.<br>Use All metrics for exact counts and definitions.</p>
-        </div>
-        <section class="detail-sheet" id="selected-workload" aria-labelledby="selected-title">
-          <div class="detail-head"><div><h2 id="selected-title">${escape(item.id)}<span class="system-name">System ${item.system}</span></h2><p>Estimate as of <strong>${dateLabel(current.asOf)}</strong> &middot; ${escape(current.config)}</p><div class="estimate-status"><strong>${escape(current.maturity)}</strong><span>Engineer-supplied maturity${current.local ? " / in-tab snapshot only" : ""}</span></div></div>
-          <label class="field-inline snapshot-choice">Snapshot<select id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf, true)} / ${escape(snapshot.config)} / rev ${snapshot.revision + 1}${snapshot.local ? " / in-tab only" : ""}</option>`).join("")}</select></label></div>
-          <div class="primary-metrics"><section aria-label="Selected logical operation count"><h3 class="metric-label">Logical operations</h3><div class="metric-value" data-metric="logicalOps" title="${group(current.metrics.logicalOps)}">${compact(current.metrics.logicalOps)}</div></section><section aria-label="Selected logical qubit count"><h3 class="metric-label">Logical qubits</h3><div class="metric-value" data-metric="logicalQubits" title="${group(current.metrics.logicalQubits)}">${compact(current.metrics.logicalQubits)}</div></section></div>
-          ${decisionContext(item, current)}
-          <div class="assumption-notice${!previous ? " warning" : ""}">${infoIcon}<strong>${previous ? `Same-version comparison: ${escape(current.config)}.` : "No compatible earlier snapshot."}</strong> ${previous ? `The comparison with ${dateLabel(previous.asOf)} is valid on the recorded version. ${hasBoundary ? "Older versions are shown separately; their lines are not joined." : "All displayed snapshots use this basis."}` : "No change percentage is shown; a new dated estimate on the same basis is needed."}</div>
-          <div class="trend-grid">
-            <section class="trend" aria-label="Logical operations trend"><h3 class="metric-label">Logical operations over time</h3>${changeMarkup(item, "logicalOps")}${chart(item, "logicalOps", "Logical operations")}<div class="overhead"><span>Physical operations per logical operation${opRatio === null ? `<small class="ratio-note">${ratioNote(current, "physicalOps", "logicalOps")}</small>` : ""}</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong></div></section>
-            <section class="trend" aria-label="Logical qubits trend"><h3 class="metric-label">Logical qubits over time</h3>${changeMarkup(item, "logicalQubits")}${chart(item, "logicalQubits", "Logical qubits")}<div class="overhead"><span>Physical qubits per logical qubit${qubitRatio === null ? `<small class="ratio-note">${ratioNote(current, "physicalQubits", "logicalQubits")}</small>` : ""}</span><strong>${qubitRatio === null ? "Not available" : `${qubitRatio} : 1`}</strong></div></section>
-          </div>
-          <p class="change-note"><strong>Why it changed</strong>${escape(current.reason)} <span class="context-source">Recorded by ${escape(current.owner)}.</span></p>
-          <div class="overview-links"><a data-nav href="${escape(urlFor("metrics"))}">All seven counts &amp; history</a><a data-nav href="${escape(urlFor("compare"))}">Compare all candidates</a></div>
-          <details class="technical-details"><summary>Runtime &amp; gate composition</summary><div class="context-rail">
-            <section class="context-item"><h3>Estimated runtime</h3><div class="context-value">${current.context.runtimeHours ? `${escape(current.context.runtimeHours)} <span class="unit">hours</span>` : "Not supplied"}</div><p>${current.context.runtimeLowHours && current.context.runtimeHighHours ? `${escape(current.context.runtimeLowHours)}&ndash;${escape(current.context.runtimeHighHours)} h illustrative range` : "No range supplied"}<br>Not a statistical confidence interval.</p><p class="context-source">Engineer-supplied timing model</p></section>
-            <section class="context-item"><h3>Non-Clifford gate share</h3><div class="context-value">${share.text}</div>${share.segments.length ? `<div class="gate-bar" role="img" aria-label="Illustrative gate composition: non-Clifford ${share.text}, 1-qubit Clifford ${percentage(current.metrics.clifford1, share.total)}, 2-qubit Clifford ${percentage(current.metrics.clifford2, share.total)}">${share.segments.map(width => `<span style="width:${width}%"></span>`).join("")}</div><div class="gate-legend">Non-Clifford / 1-qubit / 2-qubit</div>` : ""}<p>Of classified logical gates.</p><p class="context-source">Engineer-confirmed gate basis required</p></section>
-          </div></details>
-          ${provenance(current)}
-        </section>
-      </div>
-      <p class="support-caption">Targets, ranges, timing models, reporting cadence, and gate definitions are illustrative inputs, not conclusions inferred from the counts. Ratios are overhead descriptors, not runtime speedups.</p>`;
+    const item = workload(state.selected), current = selectedSnapshot(item);
+    const historical = current.id !== latest(item).id;
+    const snapshots = chartSnapshots(item);
+    const otherVersions = snapshots.some(snapshot => snapshot.config !== current.config);
+    const missing = snapshots.some(snapshot => !isCount(snapshot.metrics.logicalOps) || !isCount(snapshot.metrics.logicalQubits));
+    const explanation = [
+      "Changes compare the same configuration.",
+      otherVersions ? "Gray: other assumptions; lines break between versions." : "",
+      missing ? "Missing counts create gaps, not zeros." : "",
+      snapshots.length === 1 ? "One dated snapshot; another is needed for a trend." : ""
+    ].filter(Boolean).join(" ");
+    return `<div class="overview-page"><div class="overview-heading"><h1>Resource overview</h1>
+      <details class="snapshot-picker"><summary>Snapshot history</summary><div class="snapshot-options">
+        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / ${escape(snapshot.config)} / rev ${snapshot.revision + 1}${snapshot.local ? " / in-tab only" : ""}</option>`).join("")}</select></label>
+        <button type="button" class="text-button" data-action="history">View full revision history</button>
+      </div></details></div>
+      <div class="overview-selection"><div class="candidate-controls">
+        <label class="field"><span>System</span><select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${[1, 2, 3, 4].map(system => `<option value="${system}"${state.filter === String(system) ? " selected" : ""}>System ${system}</option>`).join("")}</select></label>
+        <label class="field"><span>Application candidate</span><select class="inset-select" id="candidate-select">${[1, 2, 3, 4].filter(system => state.filter === "all" || String(system) === state.filter).map(system => `<optgroup label="System ${system}">${state.workloads.filter(candidate => candidate.system === system).map(candidate => `<option value="${escape(candidate.id)}"${candidate.id === item.id ? " selected" : ""}>${escape(candidate.id)}</option>`).join("")}</optgroup>`).join("")}</select></label>
+      </div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}As of <strong>${dateLabel(current.asOf)}</strong> &middot; ${escape(current.maturity)} &middot; ${escape(current.config)}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; in-tab only" : ""}</p></div>
+      ${overviewNotice(item, current)}
+      <section class="overview-surface" id="selected-workload" aria-label="${escape(item.id)} logical resources">
+        <div class="trend-grid">${[["logicalOps", "Logical operations"], ["logicalQubits", "Logical qubits"]].map(([key, label]) => `<section class="trend" aria-labelledby="${key}-heading"><h2 class="metric-label" id="${key}-heading">${label}</h2><div class="metric-value" data-metric="${key}" title="${group(current.metrics[key])}">${compact(current.metrics[key])}</div>${changeMarkup(item, key)}${chart(item, key, label)}</section>`).join("")}</div>
+        <p class="chart-caption">${explanation}</p>
+        <p class="snapshot-note"><strong>What changed:</strong> ${current.reason.length <= 160 ? escape(current.reason) : 'A longer engineering note is available. <button class="text-button" type="button" data-action="show-change-note">Read full note</button>'}</p>
+        ${resourceDetails(item, current)}
+      </section></div>`;
   }
 
   function historySection() {
@@ -1400,14 +1238,14 @@ dialog p { color: var(--muted); font-size: 13px; }
   function updates() {
     return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>A short account of what changed, followed by what the team is working toward.</p></div><span class="count-label">Example reporting date: 22 Sep 2026</span></div>
       <div class="updates-layout">
-        <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2><p>The same briefing shown on Overview.</p></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
+        <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
           <ul class="update-list">${activeUpdates().map(update => `<li data-update-id="${escape(update.id)}"><div class="update-meta">${scopeLink(update)}<span>&middot; ${dateLabel(update.date)} &middot; ${escape(update.owner)}</span></div><h3>${escape(update.title)}</h3><p class="written-prose">${escape(update.body)}</p>${requestMarkup(update)}</li>`).join("") || '<li>No active bullets. Earlier updates remain in history below.</li>'}</ul>
         </section>
         <section class="sheet"><div class="sheet-heading"><div><h2>What comes next</h2><p>Plans and targets &mdash; not completed results.</p></div></div>
           <ol class="milestones">
             ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-date"><strong>${milestoneDate(milestone) ? dateLabel(milestoneDate(milestone), true) : "TBD"}</strong><span>${milestoneDate(milestone)?.slice(0, 4) || "Date needed"}</span></div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p><p>${escape(milestoneWindow(milestone))}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(milestone.targetCandidate)} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No active milestones. Earlier plans remain in history below.</li>'}
           </ol>
-          <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked numeric targets use the same latest target record as Overview.</div>
+          <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked targets use the candidate's latest estimate record; a snapshot link does not pin these written plans.</div>
         </section>
       </div>
       ${writtenHistory("updates")}${writtenHistory("milestones")}`;
@@ -1416,11 +1254,11 @@ dialog p { color: var(--muted); font-size: 13px; }
   function guide() {
     const rows = [
       ["comparisons", "Change from the previous comparable estimate", "Dated counts, an assumptions/configuration version, and confirmation that snapshots are comparable.", "Count and percentage change. The comparison date is shown. No percentage when the previous denominator is zero or no compatible snapshot exists.", "Under each primary metric", "Calculated"],
-      ["reasons", "Why the estimate changed", "A short explanation, implication, any caveat, and an owner. Reuse the estimate note in the written editor; curate up to four active briefing bullets.", "Nothing is inferred from the counts. One canonical briefing supplies Overview and Updates & outlook.", "Overview + written updates", "Engineer input"],
+      ["reasons", "Why the estimate changed", "A short explanation, implication, any caveat, and an owner. Reuse the estimate note in the written editor; curate up to four active briefing bullets.", "Nothing is inferred from the counts. The snapshot note stays with Overview; the canonical briefing lives in Updates & outlook.", "Snapshot note + written updates", "Engineer input"],
       ["freshness", "Freshness and provenance", "Estimate date, maturity (Provisional or Reviewed), reporting cadence, owner, and source/run reference. Cadence and maturity are descriptive inputs, not approvals or inferred confidence.", "Age against the fixed demo reference date and a cadence exception. Save timestamp is recorded separately.", "Every row + source disclosure", "Input + calculation"],
-      ["targets", "Target and gap to target", "Target metric/value, target date, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Decision context + outlook", "Input + calculation"],
-      ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Decision context + All metrics", "Engineer input"],
-      ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Decision context + All metrics", "Definition + calculation"]
+      ["targets", "Target and gap to target", "Target metric/value, target date, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Resource details + outlook", "Input + calculation"],
+      ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Resource details + All metrics", "Engineer input"],
+      ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Resource details + All metrics", "Definition + calculation"]
     ];
     return `<div class="page-heading"><div><h1>What engineers need to provide</h1><p>One clear contract between the entry table and the leadership view.</p></div><a href="#edit" data-route="edit" class="button">Open entry table &rarr;</a></div>
       ${inlineInfo("<strong>Synthetic examples only.</strong> Do not enter real data in this public demo. A realistic-looking number is not evidence, and the demo-view switch is not access control.")}
@@ -1466,7 +1304,7 @@ dialog p { color: var(--muted); font-size: 13px; }
 
   function writtenForm() {
     const draft = state.writtenDraft;
-    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Keep one item open at a time. Briefing bullets appear in both leadership views; milestones supply the next-step context. Older versions stay in history.</p><p>All saves change this open page only. Reloading restores the published synthetic examples.</p></section>`;
+    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Keep one item open at a time. Briefing bullets and milestones appear in the leadership Updates &amp; outlook tab. Older versions stay in history.</p><p>All saves change this open page only. Reloading restores the published synthetic examples.</p></section>`;
     const { kind, values } = draft;
     const field = (key, label, options = {}) => `<label class="field${options.wide ? " wide" : ""}"><span>${label}${options.required ? ' <span class="required">Required</span>' : ""}</span>${options.textarea ? `<textarea data-written="${key}" rows="3" maxlength="${options.max || 1000}">${escape(values[key] || "")}</textarea>` : `<input data-written="${key}" type="${options.type || "text"}" value="${escape(values[key] || "")}"${options.type === "date" ? "" : ` maxlength="${options.max || 120}"`}>`}${options.hint ? `<span class="field-hint">${options.hint}</span>` : ""}</label>`;
     const select = (key, label, options) => `<label class="field"><span>${label}</span><select data-written="${key}">${options.map(([value, text]) => `<option value="${escape(value)}"${values[key] === value ? " selected" : ""}>${escape(text)}</option>`).join("")}</select></label>`;
@@ -1495,10 +1333,10 @@ dialog p { color: var(--muted); font-size: 13px; }
   function write() {
     const kind = state.writePanel, records = state[kind].filter(record => !record.archived);
     const full = kind === "updates" && records.length >= 4;
-    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain one briefing and one set of plans. Both leadership views read these records.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
+    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain the briefing and plans shown in the leadership Updates &amp; outlook tab.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
       ${inlineInfo("<strong>Demo editing, not access control.</strong> Use fictional text only. Save changes this open page; reload resets all edits.")}
       <div class="writing-tabs" aria-label="Written content"><button type="button" class="button" data-action="writing-panel" data-kind="updates" aria-pressed="${kind === "updates"}">Briefing (${activeUpdates().length}/4 active)</button><button type="button" class="button" data-action="writing-panel" data-kind="milestones" aria-pressed="${kind === "milestones"}">Milestones (${activeMilestones().length})</button></div>
-      <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the order in both reading views." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
+      <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the leadership briefing order." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
       <ol class="writing-list">${records.map((record, index) => `<li data-written-id="${escape(record.id)}"><h3>${escape(record.title)}</h3><p>${escape(scopeLabel(record.scope))} &middot; ${escape(record.owner)} &middot; ${kind === "updates" ? dateLabel(record.date) : escape(milestoneWindow(record))}</p><div class="record-actions"><button type="button" class="button small" data-action="edit-written" data-kind="${kind}" data-id="${escape(record.id)}">Edit<span class="sr-only"> ${escape(record.title)}</span></button><button type="button" class="button small" data-action="archive-written" data-kind="${kind}" data-id="${escape(record.id)}">Archive<span class="sr-only"> ${escape(record.title)}</span></button>${kind === "updates" ? `<button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="-1"${index === 0 ? " disabled" : ""} aria-label="Move ${escape(record.title)} up">Up</button><button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="1"${index === records.length - 1 ? " disabled" : ""} aria-label="Move ${escape(record.title)} down">Down</button>` : ""}</div></li>`).join("") || '<li>No active records. Add one or restore an archived record below.</li>'}</ol></section>${writtenForm()}</div>
       ${writtenHistory(kind, true)}`;
   }
@@ -1558,7 +1396,7 @@ dialog p { color: var(--muted); font-size: 13px; }
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved. Overview and Updates & outlook now use this record in this open page only.`;
+    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to Updates & outlook in this open page only.`;
     render();
     main.focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -1595,7 +1433,7 @@ dialog p { color: var(--muted); font-size: 13px; }
     state.writtenDraft = null;
     render();
     main.querySelector(`[data-written-id="${id}"] [data-action="edit-written"]`).focus();
-    announce("Briefing order updated in both leadership views, in this tab only.");
+    announce("Leadership briefing order updated, in this tab only.");
   }
 
   function newDraft() {
@@ -1630,7 +1468,7 @@ dialog p { color: var(--muted); font-size: 13px; }
         ${textField("owner", "Estimate owner", row.owner, "Who can explain this estimate?", { required: true })}
         ${textField("source", "Source / run reference", row.source, "A traceable source, not a link invented by the dashboard.", { required: true })}
         <label class="field"><span>Estimate maturity</span><select data-context="maturity">${["Provisional", "Reviewed"].map(value => `<option${row.maturity === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="field-hint">Descriptive engineer input, not an approval gate. Valid Save is immediate.</span></label>
-        <label class="field wide"><span>Visible caveat / assumptions line<span class="required">Required</span></span><textarea rows="2" data-context="caveat" required>${escape(row.caveat)}</textarea><span class="field-hint">This line appears beside the leadership charts. Keep the main caveat visible.</span></label>
+        <label class="field wide"><span>Caveat / assumptions<span class="required">Required</span></span><textarea rows="2" data-context="caveat" required>${escape(row.caveat)}</textarea><span class="field-hint">Shown in full in Resource details &amp; assumptions. Use a new version when the comparison basis changes.</span></label>
         <div class="subsection">Targets and reporting cadence</div>
         ${textField("targetPhysicalQubits", "Physical-qubit target", row.context.targetPhysicalQubits, "Engineer-set objective. Leave blank if no target is agreed.", { inputmode: "numeric" })}
         ${textField("targetDate", "Target date", row.context.targetDate, "A plan, not a promise of a future result.", { type: "date" })}
@@ -1675,7 +1513,7 @@ dialog p { color: var(--muted); font-size: 13px; }
     const tabs = engineering ? [["edit", "Estimates"], ["write", "Updates & outlook"], ["guide", "Input guide"]]
       : [["overview", "Overview"], ["compare", "Compare"], ["metrics", "All metrics"], ["updates", "Updates & outlook"]];
     document.getElementById("view-navigation").innerHTML = tabs.map(([route, text]) => `<a data-route="${route}" href="${escape(urlFor(route))}"${state.view === route ? ' aria-current="page"' : ""}>${escape(text)}</a>`).join("");
-    document.getElementById("view-description").textContent = engineering ? "Engineering demo / in-tab edits only" : "Leadership reading view";
+    document.getElementById("view-description").textContent = engineering ? "Engineering demo / in-tab edits only" : state.view === "overview" ? "" : "Leadership reading view";
     document.querySelector(".brand").dataset.route = engineering ? "edit" : "overview";
     main.innerHTML = state.urlError ? unavailableView() : `${state.notice ? `<div class="inline-message ${state.noticeType}" role="${state.noticeType === "error" ? "alert" : "status"}">${state.noticeType === "error" ? infoIcon : checkIcon}<p>${escape(state.notice)}</p></div>` : ""}${views[state.view]()}`;
     for (const link of document.querySelectorAll("[data-route]")) {
@@ -1690,6 +1528,7 @@ dialog p { color: var(--muted); font-size: 13px; }
       else link.removeAttribute("aria-current");
     }
     document.getElementById("share-action").disabled = Boolean(state.urlError);
+    document.getElementById("share-action").classList.toggle("primary", state.view !== "overview");
     document.title = `${{ overview: "Overview", compare: "Compare", metrics: "All metrics", updates: "Updates & outlook", edit: "Engineering entry", write: "Written updates editor", guide: "Engineering input guide" }[state.view]} - Resource estimates preview`;
   }
 
@@ -1925,6 +1764,8 @@ dialog p { color: var(--muted); font-size: 13px; }
   }
 
   document.addEventListener("click", event => {
+    const snapshotPicker = main.querySelector(".snapshot-picker[open]");
+    if (snapshotPicker && !snapshotPicker.contains(event.target)) snapshotPicker.open = false;
     const routeLink = event.target.closest("a[data-nav]");
     if (routeLink) {
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || routeLink.hasAttribute("download") || (routeLink.target && routeLink.target !== "_self")) return;
@@ -1943,6 +1784,10 @@ dialog p { color: var(--muted); font-size: 13px; }
       if (name === "share") shareView();
       else if (name === "copy-share") void copyShareLink();
       else if (name === "close-share") document.getElementById("share-dialog").close();
+      else if (name === "show-change-note") {
+        document.getElementById("resource-details").open = true;
+        document.getElementById("snapshot-change-note").focus();
+      }
       else if (name === "writing-panel") protectEdits(() => {
         state.writtenDraft = null;
         state.writePanel = action.dataset.kind;
@@ -2038,13 +1883,13 @@ dialog p { color: var(--muted); font-size: 13px; }
       const item = target.value === "all" || String(workload(state.selected).system) === target.value ? workload(state.selected) : state.workloads.find(item => String(item.system) === target.value);
       navigate("overview", { filter: target.value, selected: item.id, snapshot: item.id === state.selected ? state.snapshot : latest(item).id });
       document.getElementById("system-filter").focus();
-    } else if (target.id === "mobile-workload") {
+    } else if (target.id === "candidate-select") {
       navigate("overview", { selected: target.value, snapshot: latest(workload(target.value)).id });
-      document.getElementById("mobile-workload").focus({ preventScroll: true });
+      document.getElementById("candidate-select").focus({ preventScroll: true });
       announce(`${state.selected} selected.`);
     } else if (target.id === "snapshot-select") {
       navigate("overview", { snapshot: target.value });
-      document.getElementById("snapshot-select").focus({ preventScroll: true });
+      main.querySelector(".snapshot-picker > summary").focus({ preventScroll: true });
     } else if (target.id === "exact-values" || target.id === "show-ratios") {
       state[target.id === "exact-values" ? "exact" : "ratios"] = target.checked;
       render();
@@ -2119,6 +1964,13 @@ dialog p { color: var(--muted); font-size: 13px; }
     if (point) selectPoint(point.dataset.plot, point.dataset.point);
   });
   main.addEventListener("keydown", event => {
+    const snapshotPicker = main.querySelector(".snapshot-picker[open]");
+    if (event.key === "Escape" && snapshotPicker) {
+      event.preventDefault();
+      snapshotPicker.open = false;
+      snapshotPicker.querySelector("summary").focus();
+      return;
+    }
     const point = event.target.closest('g[data-point]');
     if (point && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();

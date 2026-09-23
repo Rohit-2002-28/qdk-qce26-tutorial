@@ -200,13 +200,13 @@
   function changeMarkup(item, key) {
     const selected = selectedSnapshot(item);
     const previous = previousComparable(item);
-    if (!previous) return '<div class="delta"><strong class="unavailable">No comparable earlier estimate</strong></div>';
+    if (!previous) return '<div class="delta"><strong class="unavailable">Change unavailable</strong></div>';
     if (!isCount(previous.metrics[key]) || !isCount(selected.metrics[key])) return '<div class="delta">Comparison unavailable: a count is missing.</div>';
     const before = BigInt(previous.metrics[key]);
     const difference = BigInt(selected.metrics[key]) - before;
     if (before === 0n) return `<div class="delta"><strong class="unavailable">Percentage unavailable: previous count is zero</strong></div>`;
     if (difference === 0n) return `<div class="delta"><strong>Unchanged</strong><span>vs ${dateLabel(previous.asOf, true)}</span></div>`;
-    return `<div class="delta"><strong class="${difference > 0n ? "increase" : ""}">${difference > 0n ? "&uarr;" : "&darr;"} ${percentage(difference < 0n ? -difference : difference, before)} ${difference > 0n ? "higher" : "lower"}</strong><span>vs ${dateLabel(previous.asOf, true)} &middot; same assumptions</span></div>`;
+    return `<div class="delta"><strong class="${difference > 0n ? "increase" : ""}">${difference > 0n ? "&uarr;" : "&darr;"} ${percentage(difference < 0n ? -difference : difference, before)} ${difference > 0n ? "higher" : "lower"}</strong><span>vs ${dateLabel(previous.asOf, true)}</span></div>`;
   }
 
   function gateShare(snapshot) {
@@ -252,33 +252,21 @@
     return `Next estimate expected ${dateLabel(due.toISOString().slice(0, 10))} (${snapshot.context.cadenceDays}-day engineer-set cadence).`;
   }
 
-  function attention(item) {
-    const snapshot = latest(item);
-    const cues = [];
-    if (activeUpdates().some(update => update.requestKind && appliesTo(update.scope, item))) cues.push("Action requested");
-    const days = (dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000;
-    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) cues.push("Update overdue");
-    if (!chartSnapshots(item, snapshot).some(row => row.asOf < snapshot.asOf && row.config === snapshot.config)) cues.push("New comparison basis");
-    return cues.join(" / ");
-  }
-
   function contentWidth() {
     const style = getComputedStyle(main);
     return main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   }
 
   function trendWidth() {
-    let width = contentWidth();
-    if (window.innerWidth > 900) width -= window.innerWidth > 1650 ? 388 : window.innerWidth > 1150 ? 366 : 308;
-    width -= window.innerWidth <= 600 ? 34 : window.innerWidth <= 1150 ? 42 : 50;
-    return Math.max(240, Math.floor(window.innerWidth <= 600 ? width : (width - 28) / 2));
+    const width = Math.min(contentWidth(), 1200) - (window.innerWidth <= 600 ? 34 : 50);
+    return Math.max(220, Math.floor(window.innerWidth <= 600 ? width : (width - 40) / 2));
   }
 
   function chart(item, key, label) {
     const all = chartSnapshots(item);
     const snapshots = all.filter(row => isCount(row.metrics[key]));
-    if (!snapshots.length) return '<p class="chart-caption">No counts supplied for this trend.</p>';
-    const width = trendWidth(), height = 190, left = 62, right = 18, top = 20, bottom = 35;
+    if (!snapshots.length) return '<p class="chart-empty">No counts supplied for this trend.</p>';
+    const width = trendWidth(), height = window.innerWidth <= 600 ? 170 : 220, left = 62, right = 18, top = 20, bottom = 35;
     const plotWidth = width - left - right, plotHeight = height - top - bottom;
     const rawMax = snapshots.reduce((max, row) => BigInt(row.metrics[key]) > max ? BigInt(row.metrics[key]) : max, 1n);
     const magnitude = 10n ** BigInt(rawMax.toString().length - 1);
@@ -288,7 +276,7 @@
     const x = row => snapshots.length === 1 ? left + plotWidth / 2
       : left + (dateValue(row.asOf) - firstDate) / (lastDate - firstDate) * plotWidth;
     const y = row => top + plotHeight * (1 - Number(BigInt(row.metrics[key]) * 1000000n / maximum) / 1000000);
-    const current = snapshots.at(-1);
+    const current = selectedSnapshot(item), lastAvailable = snapshots.at(-1);
     const groups = [];
     for (const row of snapshots) {
       if (!groups.length || groups.at(-1)[0].config !== row.config || all.indexOf(row) !== all.indexOf(groups.at(-1).at(-1)) + 1) groups.push([]);
@@ -305,45 +293,26 @@
       return `<line class="boundary" x1="${abscissa}" x2="${abscissa}" y1="${top - 4}" y2="${height - bottom + 4}"><title>Assumptions changed by ${dateLabel(row.asOf)}</title></line>`;
     }).join("");
     const paths = groups.map(rows => `<path class="${rows[0].config === current.config ? "current-path" : "old-path"}" d="${rows.map((row, index) => `${index === 0 ? "M" : "L"}${x(row).toFixed(2)},${y(row).toFixed(2)}`).join(" ")}"/>`).join("");
-    const points = snapshots.map(row => `<circle class="chart-point${row.config !== current.config ? " old-point" : ""}" cx="${x(row)}" cy="${y(row)}" r="${row === current ? 4.3 : 3}"><title>${dateLabel(row.asOf)}: ${group(row.metrics[key])}; ${escape(row.config)}</title></circle>`).join("");
+    const points = snapshots.map(row => `<circle class="chart-point${row.config !== current.config ? " old-point" : ""}${row === current ? " selected-point" : ""}" cx="${x(row)}" cy="${y(row)}" r="${row === current ? 4.3 : 3}"><title>${dateLabel(row.asOf)}: ${group(row.metrics[key])}; ${escape(row.config)}</title></circle>`).join("");
     const dateTicks = snapshots.filter((_, index) => index === 0 || index === snapshots.length - 1 || (width > 390 && index === Math.floor(snapshots.length / 2)));
-    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${row === snapshots[0] ? "start" : row === current ? "end" : "middle"}">${dateLabel(row.asOf, true)}</text>`).join("");
+    const ticks = dateTicks.map(row => `<text x="${x(row)}" y="${height - 9}" text-anchor="${row === snapshots[0] ? "start" : row === lastAvailable ? "end" : "middle"}">${dateLabel(row.asOf, true)}</text>`).join("");
     const chartId = `chart-${key}`;
-    const currentGroup = groups.at(-1);
-    const shadeEnd = groups.length > 1 ? (x(currentGroup[0]) + x(snapshots[snapshots.indexOf(currentGroup[0]) - 1])) / 2 : left;
-    const shade = groups.length > 1 ? `<rect x="${left}" y="${top}" width="${shadeEnd - left}" height="${plotHeight}" fill="#f6f8fa"/>` : "";
-    const caption = snapshots.length === 1 ? "One available snapshot. Another estimate is needed to show a trend."
-      : groups.length > 1 ? "Gray: earlier assumptions. The line breaks when assumptions change."
-        : `${snapshots.length} dated snapshots &middot; same illustrative assumptions.`;
-    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(item.id)}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} dated estimates. Latest available value ${group(current.metrics[key])} on ${dateLabel(current.asOf)}. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${shade}${grid}${boundaries}${paths}${points}${ticks}</svg><p class="chart-caption">${caption}${snapshots.length !== all.length ? " Missing counts are omitted; gaps are not interpolated." : ""}</p>`;
+    return `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${chartId}-title ${chartId}-description"><title id="${chartId}-title">${escape(item.id)}: ${escape(label)} over time</title><desc id="${chartId}-description">${snapshots.length} dated estimates. Latest available value ${group(lastAvailable.metrics[key])} on ${dateLabel(lastAvailable.asOf)}. Lines are not joined across changes in assumptions or missing counts. Exact values are available in All metrics and history.</desc>${grid}${boundaries}${paths}${points}${ticks}</svg>`;
   }
 
   function provenance(snapshot) {
     const savedAt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Los_Angeles" }).format(new Date(snapshot.savedAt));
-    return `<details class="source-disclosure"><summary>All seven exact counts in this snapshot</summary><div class="table-scroll" tabindex="0" role="region" aria-label="Selected snapshot counts; scroll for all seven metrics"><table class="data-table"><thead><tr>${fields.map(field => `<th scope="col">${escape(field.label)}</th>`).join("")}</tr></thead><tbody><tr>${fields.map(field => `<td>${group(snapshot.metrics[field.key])}</td>`).join("")}</tr></tbody></table></div></details>
-      <details class="source-disclosure">
-      <summary>Assumptions, freshness &amp; source</summary>
-      <dl class="provenance-grid">
-        <div><dt>Estimate as of / maturity</dt><dd>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.maturity)}<br>${escape(freshness(snapshot))}</dd></div>
-        <div><dt>Saved separately from the estimate date</dt><dd>${escape(savedAt)} PT<br>${escape(snapshot.owner)}</dd></div>
-        <div><dt>Configuration / caveat</dt><dd>${escape(snapshot.config)}<br>${escape(snapshot.caveat)}</dd></div>
-        <div><dt>Provenance</dt><dd>${escape(snapshot.source)}<br>Fictional run reference; no external source is connected.</dd></div>
-        <div><dt>Runtime basis</dt><dd>${escape(snapshot.context.timingModel || "Timing assumptions not supplied.")}</dd></div>
-        <div><dt>Gate-share denominator</dt><dd>${escape(snapshot.context.gateBasisConfirmed ? snapshot.context.gateBasis : "Unconfirmed. Engineering must establish compatible gate categories before a share is shown.")}</dd></div>
-      </dl>
-    </details>`;
+    return `<section><h3>Assumptions &amp; source</h3><dl class="resource-facts">
+        <div><dt>Configuration / caveat</dt><dd>${escape(snapshot.config)} &mdash; ${escape(snapshot.caveat)}</dd></div>
+        <div><dt>Estimate owner / source</dt><dd>${escape(snapshot.owner)} &middot; ${escape(snapshot.source)}</dd></div>
+        <div><dt>Saved at (not the estimate date)</dt><dd>${escape(savedAt)} PT</dd></div>
+        <div><dt>Reporting cadence</dt><dd>${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}. Relative to the ${dateLabel(DEMO.referenceDate)} demo date.</dd></div>
+      </dl></section>`;
   }
 
   function requestMarkup(update, className = "request-note") {
     if (!update.requestKind) return "";
     return `<p class="${className}"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)} &middot; ${update.requestDue ? `due ${dateLabel(update.requestDue)}` : "due date not supplied"}</p>`;
-  }
-
-  function briefing() {
-    const updates = activeUpdates();
-    return `<section class="briefing" aria-labelledby="briefing-title"><div class="briefing-head"><h2 id="briefing-title">Since the last review</h2><a data-nav href="${escape(urlFor("updates"))}">Read updates &amp; outlook</a></div>
-      ${updates.length ? `<ul class="briefing-list">${updates.map(update => `<li data-briefing-id="${escape(update.id)}"><span class="briefing-scope">${scopeLink(update)}</span><a data-nav href="${escape(urlFor("updates"))}">${escape(update.title)}</a><span class="briefing-owner">${dateLabel(update.date, true)} &middot; ${escape(update.owner)}</span>${update.requestKind ? `<span class="briefing-request"><strong>${escape(update.requestKind)}:</strong> ${escape(update.request)} &middot; ${escape(update.requestOwner)}${update.requestDue ? ` &middot; due ${dateLabel(update.requestDue, true)}` : " &middot; due date not supplied"}</span>` : ""}</li>`).join("")}</ul>` : '<p class="section-description">No active briefing bullets. Older updates remain in history.</p>'}
-      </section>`;
   }
 
   function milestoneTarget(milestone) {
@@ -365,71 +334,70 @@
     return `<span data-target-current="${escape(snapshot.metrics.physicalQubits)}"><strong>${compact(snapshot.metrics.physicalQubits)} physical qubits</strong> ${compactLine ? "now" : "in the selected snapshot"}</span> vs <strong>${context.targetPhysicalQubits ? compact(context.targetPhysicalQubits) : "no supplied"} target</strong>${context.targetDate ? ` by ${dateLabel(context.targetDate)}` : ""}. <span data-target-gap>${escape(gap.text)}; ${escape(gap.detail)}</span>`;
   }
 
-  function nextMilestone(item) {
-    return activeMilestones().filter(milestone => milestone.status !== "Done" && appliesTo(milestone.scope, item))
-      .sort((a, b) => (milestoneDate(a) || "9999").localeCompare(milestoneDate(b) || "9999"))[0];
+  function overviewNotice(item, snapshot) {
+    if (!previousComparable(item)) return `<p class="overview-notice">No comparable earlier estimate on <strong>${escape(snapshot.config)}</strong>; cross-version changes are not compared.</p>`;
+    if (snapshot.id !== latest(item).id) return "";
+    const blocker = activeUpdates().find(update => update.requestKind === "Blocker" && appliesTo(update.scope, item))
+      || activeMilestones().find(milestone => milestone.status === "Blocked" && appliesTo(milestone.scope, item));
+    if (blocker) return `<p class="overview-notice"><strong>Blocker recorded:</strong> ${escape(blocker.title)}. <a data-nav href="${escape(urlFor("updates"))}">Read blocker</a></p>`;
+    const days = Math.floor((dateValue(DEMO.referenceDate) - dateValue(snapshot.asOf)) / 86400000);
+    if (snapshot.context.cadenceDays && days > Number(snapshot.context.cadenceDays)) return `<p class="overview-notice"><strong>Update overdue:</strong> ${days} days old against a ${escape(snapshot.context.cadenceDays)}-day cadence, as of the ${dateLabel(DEMO.referenceDate, true)} demo date.</p>`;
+    if (days < 0) return '<p class="overview-notice">This estimate is future-dated relative to the demo reference date.</p>';
+    return "";
   }
 
-  function decisionContext(item, snapshot) {
-    const milestone = nextMilestone(item);
-    const requests = activeUpdates().filter(update => update.requestKind && appliesTo(update.scope, item));
-    const otherPlans = activeMilestones().filter(plan => plan !== milestone && appliesTo(plan.scope, item));
-    return `<section class="decision-context" aria-label="Goal and next action"><h3>Physical-qubit objective</h3>
-      <p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p>
-      <p class="next-step" data-next-milestone>${milestone ? `<strong>Next milestone:</strong> ${escape(milestone.title)} &middot; ${escape(milestoneWindow(milestone))} &middot; ${escape(milestone.owner)} &middot; ${escape(milestone.status)}. <span>${escape(milestone.outcome)}</span>${milestone.dependencies ? ` <span>Dependency: ${escape(milestone.dependencies)}</span>` : ""}` : "<strong>Next milestone:</strong> Not supplied for this candidate."}</p>
-      ${requests.map(update => requestMarkup(update, "request-line")).join("")}
-      <p class="freshness-line">${escape(nextExpected(snapshot))} ${escape(freshness(snapshot))}.</p>
-      ${otherPlans.length ? `<details class="other-plans"><summary>${otherPlans.length} other milestone${otherPlans.length === 1 ? "" : "s"} / linked objectives</summary>${otherPlans.map(plan => `<p data-other-milestone="${escape(plan.id)}"><strong>${escape(plan.title)}</strong> &middot; ${escape(milestoneWindow(plan))} &middot; ${escape(plan.owner)} &middot; ${escape(plan.status)}. ${escape(plan.outcome)}${plan.targetCandidate ? ` Linked future objective: ${targetMarkup(milestoneTarget(plan), true)}` : ""}${plan.dependencies ? ` Dependency: ${escape(plan.dependencies)}` : ""}</p>`).join("")}</details>` : ""}
-      ${snapshot.id !== latest(item).id ? '<p class="freshness-line">Historical snapshot selected. Written plans refer to the latest in-tab data, not a plan captured at that historical date.</p>' : ""}
-      </section>`;
+  function resourceDetails(item, snapshot) {
+    const share = gateShare(snapshot);
+    const opRatio = ratio(snapshot.metrics.physicalOps, snapshot.metrics.logicalOps);
+    const qubitRatio = ratio(snapshot.metrics.physicalQubits, snapshot.metrics.logicalQubits);
+    return `<details class="resource-details" id="resource-details"><summary>Resource details &amp; assumptions</summary>
+      <div class="resource-details-body"><div class="resource-detail-grid">
+        <section><h3>Physical resources &amp; target</h3><p class="goal-line">${targetMarkup(snapshot, snapshot.id === latest(item).id)}</p><p>Engineer-set objective, not a forecast. Target basis: ${escape(snapshot.context.targetConfig || "not supplied")}.</p>
+          <dl class="resource-facts"><div><dt>Physical operations</dt><dd>${group(snapshot.metrics.physicalOps)}</dd></div></dl>
+          <p class="overhead"><span>Physical operations per logical operation</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong>${opRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalOps", "logicalOps")}</span>` : ""}</p>
+          <p class="overhead"><span>Physical qubits per logical qubit</span><strong>${qubitRatio === null ? "Not available" : `${qubitRatio} : 1`}</strong>${qubitRatio === null ? `<span class="ratio-note">${ratioNote(snapshot, "physicalQubits", "logicalQubits")}</span>` : ""}</p><p>Overhead ratios are not runtime speedups.</p>
+        </section>
+        <section><h3>Runtime &amp; gate share</h3><dl class="resource-facts">
+          <div><dt>Estimated runtime</dt><dd>${snapshot.context.runtimeHours ? `${escape(snapshot.context.runtimeHours)} hours` : "Not supplied"}${snapshot.context.runtimeLowHours && snapshot.context.runtimeHighHours ? `; ${escape(snapshot.context.runtimeLowHours)}&ndash;${escape(snapshot.context.runtimeHighHours)} h illustrative range` : "; no range supplied"}. Not a statistical confidence interval.</dd></div>
+          <div><dt>Engineer-supplied timing model</dt><dd>${escape(snapshot.context.timingModel || "Timing assumptions not supplied.")}</dd></div>
+          <div><dt>Non-Clifford share of classified logical gates</dt><dd>${share.text}${share.total > 0n ? `; 1-qubit Clifford ${percentage(snapshot.metrics.clifford1, share.total)}; 2-qubit Clifford ${percentage(snapshot.metrics.clifford2, share.total)}` : ""}</dd></div>
+          <div><dt>Gate-share basis</dt><dd>${escape(snapshot.context.gateBasisConfirmed ? snapshot.context.gateBasis : "Unconfirmed. Engineering must establish compatible gate categories before a share is shown.")}</dd></div>
+        </dl></section>
+        ${provenance(snapshot)}
+        <section id="snapshot-change-note" tabindex="-1"><h3>What changed</h3><p class="written-prose">${escape(snapshot.reason)}</p></section>
+      </div>
+      <h3>All seven exact counts in this snapshot</h3><div class="table-scroll" tabindex="0" role="region" aria-label="Selected snapshot counts; scroll for all seven metrics"><table class="data-table"><thead><tr>${fields.map(field => `<th scope="col">${escape(field.label)}</th>`).join("")}</tr></thead><tbody><tr>${fields.map(field => `<td>${group(snapshot.metrics[field.key])}</td>`).join("")}</tr></tbody></table></div>
+      </div></details>`;
   }
 
   function overview() {
-    const visible = state.workloads.filter(item => state.filter === "all" || String(item.system) === state.filter);
-    const item = workload(state.selected), current = selectedSnapshot(item), share = gateShare(current);
-    const opRatio = ratio(current.metrics.physicalOps, current.metrics.logicalOps);
-    const qubitRatio = ratio(current.metrics.physicalQubits, current.metrics.logicalQubits);
-    const hasBoundary = new Set(chartSnapshots(item).map(row => row.config)).size > 1;
-    const previous = previousComparable(item);
-    const rows = visible.map(entry => {
-      const snapshot = latest(entry);
-      const cue = attention(entry);
-      return `<tr class="${entry.id === state.selected ? "is-selected" : ""}">
-        <th scope="row"><a class="workload-button" data-nav href="${escape(candidateUrl(entry.id, snapshot))}" ${entry.id === state.selected ? 'aria-current="true"' : ""}>${escape(entry.id)}</a><span class="workload-date">${dateLabel(snapshot.asOf, true)}</span>${cue ? `<span class="attention-cue">${escape(cue)}</span>` : ""}</th>
-        <td title="${group(snapshot.metrics.logicalOps)}">${compact(snapshot.metrics.logicalOps)}</td><td title="${group(snapshot.metrics.logicalQubits)}">${compact(snapshot.metrics.logicalQubits)}</td></tr>`;
-    }).join("");
-    return `<div class="page-heading overview-heading"><div><h1>Resource overview</h1><p>Current estimates, what changed, and what comes next.</p></div>
-      <div class="heading-controls"><label class="field-inline" for="system-filter">System<select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${[1, 2, 3, 4].map(system => `<option value="${system}"${state.filter === String(system) ? " selected" : ""}>System ${system}</option>`).join("")}</select></label></div></div>
-      ${briefing()}
-      <div class="overview-layout">
-        <div>
-          <label class="mobile-candidate"><span>Application candidate</span><select id="mobile-workload">${visible.map(entry => `<option value="${escape(entry.id)}"${entry.id === state.selected ? " selected" : ""}>${escape(entry.id)}${attention(entry) ? ` - ${escape(attention(entry))}` : ""}</option>`).join("")}</select></label>
-          <div class="ledger-section"><section class="ledger" aria-labelledby="workloads-title"><div class="ledger-heading"><h2 id="workloads-title">Application candidates</h2><span class="count-label">${visible.length} workloads</span></div>
-            <table class="ledger-table"><thead><tr><th scope="col">Workload / estimate date</th><th scope="col">Logical<br>operations</th><th scope="col">Logical<br>qubits</th></tr></thead><tbody>${rows}</tbody></table>
-            <p class="ledger-note">Select a candidate to explore its history.<br>Independent workloads &mdash; not a combined total.</p>
-          </section></div>
-          <p class="ledger-footnote">K = thousand &middot; M = million &middot; B = billion.<br>Use All metrics for exact counts and definitions.</p>
-        </div>
-        <section class="detail-sheet" id="selected-workload" aria-labelledby="selected-title">
-          <div class="detail-head"><div><h2 id="selected-title">${escape(item.id)}<span class="system-name">System ${item.system}</span></h2><p>Estimate as of <strong>${dateLabel(current.asOf)}</strong> &middot; ${escape(current.config)}</p><div class="estimate-status"><strong>${escape(current.maturity)}</strong><span>Engineer-supplied maturity${current.local ? " / in-tab snapshot only" : ""}</span></div></div>
-          <label class="field-inline snapshot-choice">Snapshot<select id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf, true)} / ${escape(snapshot.config)} / rev ${snapshot.revision + 1}${snapshot.local ? " / in-tab only" : ""}</option>`).join("")}</select></label></div>
-          <div class="primary-metrics"><section aria-label="Selected logical operation count"><h3 class="metric-label">Logical operations</h3><div class="metric-value" data-metric="logicalOps" title="${group(current.metrics.logicalOps)}">${compact(current.metrics.logicalOps)}</div></section><section aria-label="Selected logical qubit count"><h3 class="metric-label">Logical qubits</h3><div class="metric-value" data-metric="logicalQubits" title="${group(current.metrics.logicalQubits)}">${compact(current.metrics.logicalQubits)}</div></section></div>
-          ${decisionContext(item, current)}
-          <div class="assumption-notice${!previous ? " warning" : ""}">${infoIcon}<strong>${previous ? `Same-version comparison: ${escape(current.config)}.` : "No compatible earlier snapshot."}</strong> ${previous ? `The comparison with ${dateLabel(previous.asOf)} is valid on the recorded version. ${hasBoundary ? "Older versions are shown separately; their lines are not joined." : "All displayed snapshots use this basis."}` : "No change percentage is shown; a new dated estimate on the same basis is needed."}</div>
-          <div class="trend-grid">
-            <section class="trend" aria-label="Logical operations trend"><h3 class="metric-label">Logical operations over time</h3>${changeMarkup(item, "logicalOps")}${chart(item, "logicalOps", "Logical operations")}<div class="overhead"><span>Physical operations per logical operation${opRatio === null ? `<small class="ratio-note">${ratioNote(current, "physicalOps", "logicalOps")}</small>` : ""}</span><strong>${opRatio === null ? "Not available" : `${opRatio} : 1`}</strong></div></section>
-            <section class="trend" aria-label="Logical qubits trend"><h3 class="metric-label">Logical qubits over time</h3>${changeMarkup(item, "logicalQubits")}${chart(item, "logicalQubits", "Logical qubits")}<div class="overhead"><span>Physical qubits per logical qubit${qubitRatio === null ? `<small class="ratio-note">${ratioNote(current, "physicalQubits", "logicalQubits")}</small>` : ""}</span><strong>${qubitRatio === null ? "Not available" : `${qubitRatio} : 1`}</strong></div></section>
-          </div>
-          <p class="change-note"><strong>Why it changed</strong>${escape(current.reason)} <span class="context-source">Recorded by ${escape(current.owner)}.</span></p>
-          <div class="overview-links"><a data-nav href="${escape(urlFor("metrics"))}">All seven counts &amp; history</a><a data-nav href="${escape(urlFor("compare"))}">Compare all candidates</a></div>
-          <details class="technical-details"><summary>Runtime &amp; gate composition</summary><div class="context-rail">
-            <section class="context-item"><h3>Estimated runtime</h3><div class="context-value">${current.context.runtimeHours ? `${escape(current.context.runtimeHours)} <span class="unit">hours</span>` : "Not supplied"}</div><p>${current.context.runtimeLowHours && current.context.runtimeHighHours ? `${escape(current.context.runtimeLowHours)}&ndash;${escape(current.context.runtimeHighHours)} h illustrative range` : "No range supplied"}<br>Not a statistical confidence interval.</p><p class="context-source">Engineer-supplied timing model</p></section>
-            <section class="context-item"><h3>Non-Clifford gate share</h3><div class="context-value">${share.text}</div>${share.segments.length ? `<div class="gate-bar" role="img" aria-label="Illustrative gate composition: non-Clifford ${share.text}, 1-qubit Clifford ${percentage(current.metrics.clifford1, share.total)}, 2-qubit Clifford ${percentage(current.metrics.clifford2, share.total)}">${share.segments.map(width => `<span style="width:${width}%"></span>`).join("")}</div><div class="gate-legend">Non-Clifford / 1-qubit / 2-qubit</div>` : ""}<p>Of classified logical gates.</p><p class="context-source">Engineer-confirmed gate basis required</p></section>
-          </div></details>
-          ${provenance(current)}
-        </section>
-      </div>
-      <p class="support-caption">Targets, ranges, timing models, reporting cadence, and gate definitions are illustrative inputs, not conclusions inferred from the counts. Ratios are overhead descriptors, not runtime speedups.</p>`;
+    const item = workload(state.selected), current = selectedSnapshot(item);
+    const historical = current.id !== latest(item).id;
+    const snapshots = chartSnapshots(item);
+    const otherVersions = snapshots.some(snapshot => snapshot.config !== current.config);
+    const missing = snapshots.some(snapshot => !isCount(snapshot.metrics.logicalOps) || !isCount(snapshot.metrics.logicalQubits));
+    const explanation = [
+      "Changes compare the same configuration.",
+      otherVersions ? "Gray: other assumptions; lines break between versions." : "",
+      missing ? "Missing counts create gaps, not zeros." : "",
+      snapshots.length === 1 ? "One dated snapshot; another is needed for a trend." : ""
+    ].filter(Boolean).join(" ");
+    return `<div class="overview-page"><div class="overview-heading"><h1>Resource overview</h1>
+      <details class="snapshot-picker"><summary>Snapshot history</summary><div class="snapshot-options">
+        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / ${escape(snapshot.config)} / rev ${snapshot.revision + 1}${snapshot.local ? " / in-tab only" : ""}</option>`).join("")}</select></label>
+        <button type="button" class="text-button" data-action="history">View full revision history</button>
+      </div></details></div>
+      <div class="overview-selection"><div class="candidate-controls">
+        <label class="field"><span>System</span><select id="system-filter"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${[1, 2, 3, 4].map(system => `<option value="${system}"${state.filter === String(system) ? " selected" : ""}>System ${system}</option>`).join("")}</select></label>
+        <label class="field"><span>Application candidate</span><select class="inset-select" id="candidate-select">${[1, 2, 3, 4].filter(system => state.filter === "all" || String(system) === state.filter).map(system => `<optgroup label="System ${system}">${state.workloads.filter(candidate => candidate.system === system).map(candidate => `<option value="${escape(candidate.id)}"${candidate.id === item.id ? " selected" : ""}>${escape(candidate.id)}</option>`).join("")}</optgroup>`).join("")}</select></label>
+      </div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}As of <strong>${dateLabel(current.asOf)}</strong> &middot; ${escape(current.maturity)} &middot; ${escape(current.config)}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; in-tab only" : ""}</p></div>
+      ${overviewNotice(item, current)}
+      <section class="overview-surface" id="selected-workload" aria-label="${escape(item.id)} logical resources">
+        <div class="trend-grid">${[["logicalOps", "Logical operations"], ["logicalQubits", "Logical qubits"]].map(([key, label]) => `<section class="trend" aria-labelledby="${key}-heading"><h2 class="metric-label" id="${key}-heading">${label}</h2><div class="metric-value" data-metric="${key}" title="${group(current.metrics[key])}">${compact(current.metrics[key])}</div>${changeMarkup(item, key)}${chart(item, key, label)}</section>`).join("")}</div>
+        <p class="chart-caption">${explanation}</p>
+        <p class="snapshot-note"><strong>What changed:</strong> ${current.reason.length <= 160 ? escape(current.reason) : 'A longer engineering note is available. <button class="text-button" type="button" data-action="show-change-note">Read full note</button>'}</p>
+        ${resourceDetails(item, current)}
+      </section></div>`;
   }
 
   function historySection() {
@@ -583,14 +551,14 @@
   function updates() {
     return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>A short account of what changed, followed by what the team is working toward.</p></div><span class="count-label">Example reporting date: 22 Sep 2026</span></div>
       <div class="updates-layout">
-        <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2><p>The same briefing shown on Overview.</p></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
+        <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
           <ul class="update-list">${activeUpdates().map(update => `<li data-update-id="${escape(update.id)}"><div class="update-meta">${scopeLink(update)}<span>&middot; ${dateLabel(update.date)} &middot; ${escape(update.owner)}</span></div><h3>${escape(update.title)}</h3><p class="written-prose">${escape(update.body)}</p>${requestMarkup(update)}</li>`).join("") || '<li>No active bullets. Earlier updates remain in history below.</li>'}</ul>
         </section>
         <section class="sheet"><div class="sheet-heading"><div><h2>What comes next</h2><p>Plans and targets &mdash; not completed results.</p></div></div>
           <ol class="milestones">
             ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-date"><strong>${milestoneDate(milestone) ? dateLabel(milestoneDate(milestone), true) : "TBD"}</strong><span>${milestoneDate(milestone)?.slice(0, 4) || "Date needed"}</span></div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p><p>${escape(milestoneWindow(milestone))}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(milestone.targetCandidate)} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No active milestones. Earlier plans remain in history below.</li>'}
           </ol>
-          <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked numeric targets use the same latest target record as Overview.</div>
+          <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked targets use the candidate's latest estimate record; a snapshot link does not pin these written plans.</div>
         </section>
       </div>
       ${writtenHistory("updates")}${writtenHistory("milestones")}`;
@@ -599,11 +567,11 @@
   function guide() {
     const rows = [
       ["comparisons", "Change from the previous comparable estimate", "Dated counts, an assumptions/configuration version, and confirmation that snapshots are comparable.", "Count and percentage change. The comparison date is shown. No percentage when the previous denominator is zero or no compatible snapshot exists.", "Under each primary metric", "Calculated"],
-      ["reasons", "Why the estimate changed", "A short explanation, implication, any caveat, and an owner. Reuse the estimate note in the written editor; curate up to four active briefing bullets.", "Nothing is inferred from the counts. One canonical briefing supplies Overview and Updates & outlook.", "Overview + written updates", "Engineer input"],
+      ["reasons", "Why the estimate changed", "A short explanation, implication, any caveat, and an owner. Reuse the estimate note in the written editor; curate up to four active briefing bullets.", "Nothing is inferred from the counts. The snapshot note stays with Overview; the canonical briefing lives in Updates & outlook.", "Snapshot note + written updates", "Engineer input"],
       ["freshness", "Freshness and provenance", "Estimate date, maturity (Provisional or Reviewed), reporting cadence, owner, and source/run reference. Cadence and maturity are descriptive inputs, not approvals or inferred confidence.", "Age against the fixed demo reference date and a cadence exception. Save timestamp is recorded separately.", "Every row + source disclosure", "Input + calculation"],
-      ["targets", "Target and gap to target", "Target metric/value, target date, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Decision context + outlook", "Input + calculation"],
-      ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Decision context + All metrics", "Engineer input"],
-      ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Decision context + All metrics", "Definition + calculation"]
+      ["targets", "Target and gap to target", "Target metric/value, target date, assumptions version, and whether it is a committed or exploratory objective.", "Absolute and percentage gap, only on a compatible basis. No claim that the goal will be achieved.", "Resource details + outlook", "Input + calculation"],
+      ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Resource details + All metrics", "Engineer input"],
+      ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Resource details + All metrics", "Definition + calculation"]
     ];
     return `<div class="page-heading"><div><h1>What engineers need to provide</h1><p>One clear contract between the entry table and the leadership view.</p></div><a href="#edit" data-route="edit" class="button">Open entry table &rarr;</a></div>
       ${inlineInfo("<strong>Synthetic examples only.</strong> Do not enter real data in this public demo. A realistic-looking number is not evidence, and the demo-view switch is not access control.")}
@@ -649,7 +617,7 @@
 
   function writtenForm() {
     const draft = state.writtenDraft;
-    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Keep one item open at a time. Briefing bullets appear in both leadership views; milestones supply the next-step context. Older versions stay in history.</p><p>All saves change this open page only. Reloading restores the published synthetic examples.</p></section>`;
+    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Keep one item open at a time. Briefing bullets and milestones appear in the leadership Updates &amp; outlook tab. Older versions stay in history.</p><p>All saves change this open page only. Reloading restores the published synthetic examples.</p></section>`;
     const { kind, values } = draft;
     const field = (key, label, options = {}) => `<label class="field${options.wide ? " wide" : ""}"><span>${label}${options.required ? ' <span class="required">Required</span>' : ""}</span>${options.textarea ? `<textarea data-written="${key}" rows="3" maxlength="${options.max || 1000}">${escape(values[key] || "")}</textarea>` : `<input data-written="${key}" type="${options.type || "text"}" value="${escape(values[key] || "")}"${options.type === "date" ? "" : ` maxlength="${options.max || 120}"`}>`}${options.hint ? `<span class="field-hint">${options.hint}</span>` : ""}</label>`;
     const select = (key, label, options) => `<label class="field"><span>${label}</span><select data-written="${key}">${options.map(([value, text]) => `<option value="${escape(value)}"${values[key] === value ? " selected" : ""}>${escape(text)}</option>`).join("")}</select></label>`;
@@ -678,10 +646,10 @@
   function write() {
     const kind = state.writePanel, records = state[kind].filter(record => !record.archived);
     const full = kind === "updates" && records.length >= 4;
-    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain one briefing and one set of plans. Both leadership views read these records.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
+    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain the briefing and plans shown in the leadership Updates &amp; outlook tab.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
       ${inlineInfo("<strong>Demo editing, not access control.</strong> Use fictional text only. Save changes this open page; reload resets all edits.")}
       <div class="writing-tabs" aria-label="Written content"><button type="button" class="button" data-action="writing-panel" data-kind="updates" aria-pressed="${kind === "updates"}">Briefing (${activeUpdates().length}/4 active)</button><button type="button" class="button" data-action="writing-panel" data-kind="milestones" aria-pressed="${kind === "milestones"}">Milestones (${activeMilestones().length})</button></div>
-      <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the order in both reading views." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
+      <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the leadership briefing order." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
       <ol class="writing-list">${records.map((record, index) => `<li data-written-id="${escape(record.id)}"><h3>${escape(record.title)}</h3><p>${escape(scopeLabel(record.scope))} &middot; ${escape(record.owner)} &middot; ${kind === "updates" ? dateLabel(record.date) : escape(milestoneWindow(record))}</p><div class="record-actions"><button type="button" class="button small" data-action="edit-written" data-kind="${kind}" data-id="${escape(record.id)}">Edit<span class="sr-only"> ${escape(record.title)}</span></button><button type="button" class="button small" data-action="archive-written" data-kind="${kind}" data-id="${escape(record.id)}">Archive<span class="sr-only"> ${escape(record.title)}</span></button>${kind === "updates" ? `<button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="-1"${index === 0 ? " disabled" : ""} aria-label="Move ${escape(record.title)} up">Up</button><button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="1"${index === records.length - 1 ? " disabled" : ""} aria-label="Move ${escape(record.title)} down">Down</button>` : ""}</div></li>`).join("") || '<li>No active records. Add one or restore an archived record below.</li>'}</ol></section>${writtenForm()}</div>
       ${writtenHistory(kind, true)}`;
   }
@@ -741,7 +709,7 @@
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved. Overview and Updates & outlook now use this record in this open page only.`;
+    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to Updates & outlook in this open page only.`;
     render();
     main.focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -778,7 +746,7 @@
     state.writtenDraft = null;
     render();
     main.querySelector(`[data-written-id="${id}"] [data-action="edit-written"]`).focus();
-    announce("Briefing order updated in both leadership views, in this tab only.");
+    announce("Leadership briefing order updated, in this tab only.");
   }
 
   function newDraft() {
@@ -813,7 +781,7 @@
         ${textField("owner", "Estimate owner", row.owner, "Who can explain this estimate?", { required: true })}
         ${textField("source", "Source / run reference", row.source, "A traceable source, not a link invented by the dashboard.", { required: true })}
         <label class="field"><span>Estimate maturity</span><select data-context="maturity">${["Provisional", "Reviewed"].map(value => `<option${row.maturity === value ? " selected" : ""}>${value}</option>`).join("")}</select><span class="field-hint">Descriptive engineer input, not an approval gate. Valid Save is immediate.</span></label>
-        <label class="field wide"><span>Visible caveat / assumptions line<span class="required">Required</span></span><textarea rows="2" data-context="caveat" required>${escape(row.caveat)}</textarea><span class="field-hint">This line appears beside the leadership charts. Keep the main caveat visible.</span></label>
+        <label class="field wide"><span>Caveat / assumptions<span class="required">Required</span></span><textarea rows="2" data-context="caveat" required>${escape(row.caveat)}</textarea><span class="field-hint">Shown in full in Resource details &amp; assumptions. Use a new version when the comparison basis changes.</span></label>
         <div class="subsection">Targets and reporting cadence</div>
         ${textField("targetPhysicalQubits", "Physical-qubit target", row.context.targetPhysicalQubits, "Engineer-set objective. Leave blank if no target is agreed.", { inputmode: "numeric" })}
         ${textField("targetDate", "Target date", row.context.targetDate, "A plan, not a promise of a future result.", { type: "date" })}
@@ -858,7 +826,7 @@
     const tabs = engineering ? [["edit", "Estimates"], ["write", "Updates & outlook"], ["guide", "Input guide"]]
       : [["overview", "Overview"], ["compare", "Compare"], ["metrics", "All metrics"], ["updates", "Updates & outlook"]];
     document.getElementById("view-navigation").innerHTML = tabs.map(([route, text]) => `<a data-route="${route}" href="${escape(urlFor(route))}"${state.view === route ? ' aria-current="page"' : ""}>${escape(text)}</a>`).join("");
-    document.getElementById("view-description").textContent = engineering ? "Engineering demo / in-tab edits only" : "Leadership reading view";
+    document.getElementById("view-description").textContent = engineering ? "Engineering demo / in-tab edits only" : state.view === "overview" ? "" : "Leadership reading view";
     document.querySelector(".brand").dataset.route = engineering ? "edit" : "overview";
     main.innerHTML = state.urlError ? unavailableView() : `${state.notice ? `<div class="inline-message ${state.noticeType}" role="${state.noticeType === "error" ? "alert" : "status"}">${state.noticeType === "error" ? infoIcon : checkIcon}<p>${escape(state.notice)}</p></div>` : ""}${views[state.view]()}`;
     for (const link of document.querySelectorAll("[data-route]")) {
@@ -873,6 +841,7 @@
       else link.removeAttribute("aria-current");
     }
     document.getElementById("share-action").disabled = Boolean(state.urlError);
+    document.getElementById("share-action").classList.toggle("primary", state.view !== "overview");
     document.title = `${{ overview: "Overview", compare: "Compare", metrics: "All metrics", updates: "Updates & outlook", edit: "Engineering entry", write: "Written updates editor", guide: "Engineering input guide" }[state.view]} - Resource estimates preview`;
   }
 
@@ -1108,6 +1077,8 @@
   }
 
   document.addEventListener("click", event => {
+    const snapshotPicker = main.querySelector(".snapshot-picker[open]");
+    if (snapshotPicker && !snapshotPicker.contains(event.target)) snapshotPicker.open = false;
     const routeLink = event.target.closest("a[data-nav]");
     if (routeLink) {
       if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || routeLink.hasAttribute("download") || (routeLink.target && routeLink.target !== "_self")) return;
@@ -1126,6 +1097,10 @@
       if (name === "share") shareView();
       else if (name === "copy-share") void copyShareLink();
       else if (name === "close-share") document.getElementById("share-dialog").close();
+      else if (name === "show-change-note") {
+        document.getElementById("resource-details").open = true;
+        document.getElementById("snapshot-change-note").focus();
+      }
       else if (name === "writing-panel") protectEdits(() => {
         state.writtenDraft = null;
         state.writePanel = action.dataset.kind;
@@ -1221,13 +1196,13 @@
       const item = target.value === "all" || String(workload(state.selected).system) === target.value ? workload(state.selected) : state.workloads.find(item => String(item.system) === target.value);
       navigate("overview", { filter: target.value, selected: item.id, snapshot: item.id === state.selected ? state.snapshot : latest(item).id });
       document.getElementById("system-filter").focus();
-    } else if (target.id === "mobile-workload") {
+    } else if (target.id === "candidate-select") {
       navigate("overview", { selected: target.value, snapshot: latest(workload(target.value)).id });
-      document.getElementById("mobile-workload").focus({ preventScroll: true });
+      document.getElementById("candidate-select").focus({ preventScroll: true });
       announce(`${state.selected} selected.`);
     } else if (target.id === "snapshot-select") {
       navigate("overview", { snapshot: target.value });
-      document.getElementById("snapshot-select").focus({ preventScroll: true });
+      main.querySelector(".snapshot-picker > summary").focus({ preventScroll: true });
     } else if (target.id === "exact-values" || target.id === "show-ratios") {
       state[target.id === "exact-values" ? "exact" : "ratios"] = target.checked;
       render();
@@ -1302,6 +1277,13 @@
     if (point) selectPoint(point.dataset.plot, point.dataset.point);
   });
   main.addEventListener("keydown", event => {
+    const snapshotPicker = main.querySelector(".snapshot-picker[open]");
+    if (event.key === "Escape" && snapshotPicker) {
+      event.preventDefault();
+      snapshotPicker.open = false;
+      snapshotPicker.querySelector("summary").focus();
+      return;
+    }
     const point = event.target.closest('g[data-point]');
     if (point && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();

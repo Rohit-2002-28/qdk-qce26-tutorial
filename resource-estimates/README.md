@@ -12,12 +12,27 @@ the example data. The `noindex,nofollow` tag discourages indexing, not access.
 
 ## Reading and editing
 
-- **Leadership** is the default demo view. Overview reuses the active written
-  briefing, puts the physical-qubit objective and next action before the two
-  logical-resource trends, and flags explicit requests, overdue estimates and
-  new comparison bases. Freshness uses the fixed **22 Sep 2026** demo reference
-  date, not the visitor's clock. Maturity and cadence are engineer-supplied
-  descriptions, not inferred confidence or an approval workflow.
+- **Leadership** is the default demo view. Overview has one job: choose a
+  candidate and read its **logical operations** and **logical qubits**, each
+  paired with its compatible change and time trend. Compact system/candidate
+  selectors replace the ledger; all-candidate scanning remains in Compare and
+  All metrics. Snapshot history and sharing remain available without adding
+  more report sections to the default screen.
+- **Resource details & assumptions** on Overview contains the selected
+  snapshot's physical counts/current-target gap, overhead ratios, runtime/range,
+  gate share, full change note, caveats, sources, save timestamp and all seven
+  exact counts. This disclosure is closed by default. A long change note has an
+  explicit full-note action; no caveat text is silently truncated. A historical
+  selection is labeled as historical in the date/maturity/configuration line.
+- **Updates & outlook** is the home of the canonical briefing and milestones.
+  The expanded briefing, goals/planning panel and duplicate shortcut row have
+  deliberately been removed from Overview after review feedback about clutter.
+  At most one relevant exception is shown there: an incompatible comparison,
+  an engineer-recorded blocker, or an overdue/future-dated current estimate.
+  Routine plans and requests stay in Updates & outlook.
+- Freshness uses the fixed **22 Sep 2026** demo reference date, not the visitor's
+  clock. Maturity and cadence are engineer-supplied descriptions, not inferred
+  confidence or an approval workflow.
 - **Compare** shows two count-vs-count scatter plots for all eight candidates:
   logical/physical qubits and logical/physical operations. Points, keyboard
   controls and the exact-data disclosure use each candidate's latest dated
@@ -41,8 +56,9 @@ the example data. The `noindex,nofollow` tag discourages indexing, not access.
 - Milestones carry scope, outcome, date/window, owner, status and dependencies.
   Linking a physical-qubit objective reads its value, date and assumptions from
   that candidate's latest estimate; edit that shared target in Estimates.
-  Overview shows the next applicable milestone and discloses other plans.
-  Targets remain future objectives, never forecasts or current achievements.
+  Full plans and dependencies remain in Updates & outlook, while the selected
+  estimate's target is available in Overview's resource disclosure. Targets
+  remain future objectives, never forecasts or current achievements.
 
 The persona switch is a review aid, **not a permission boundary**. All in-memory
 history, written updates and new estimates disappear on reload. Do not use this
@@ -76,10 +92,17 @@ node .\resource-estimates\tests\smoke.cjs
 The checks cover fresh-context links and history, both plots' exact coordinates,
 atomic estimate edits, large/zero/missing/coincident counts, written CRUD and
 limits, linked targets, unsaved-navigation guards, and 320/390/768/1440px layouts.
+Overview checks enforce two number/change/chart pairs, a single chart explanation,
+closed secondary details, one relevant exception at most, fewer than 175 rendered
+default-content words, both complete desktop trends above 820px, and both mobile
+headlines within the first 844px. They also preserve full-note/caveat access,
+keyboard snapshot selection and the native forced-colors selector fallback.
 Set `REVIEW_ARTIFACTS` to a directory **outside this repository** and add `--visual`
-for desktop/mobile screenshots and a JSON check summary. Set `DEMO_URL` to check
-a deployed copy instead of the local standalone artifact. Test edits are
-synthetic and remain inside disposable browser contexts.
+for desktop/mobile screenshots, Overview first-screen images, measured layout/
+default-text statistics and a JSON check summary. Word counts exclude closed
+disclosures, native option lists and non-rendered accessibility text.
+Set `DEMO_URL` to check a deployed copy instead of the local standalone artifact.
+Test edits are synthetic and remain inside disposable browser contexts.
 
 Publish only this subtree through the repository's existing main/root Pages
 source. The IEEE landing page, calendars, root configuration and Pages settings
