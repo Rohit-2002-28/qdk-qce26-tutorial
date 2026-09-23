@@ -49,6 +49,12 @@ New engineering estimates require their actual as-of date.
 
 ## Reading the dashboard
 
+- One navigation serves reading and editing: **Overview**, **Resource footprint**,
+  **All metrics**, and **Updates & outlook**. There is no persona/role switch.
+  The environment notice says **Published review - view only** or **Local editing
+  workspace**. In the local service, **Edit estimates**, **Edit updates or plans**,
+  and **Edit roadmap** open the existing forms beside the views they update.
+  Public Pages omits edit actions and has no working write or export endpoints.
 - Overview places **Application candidate before System**. The grouped
   selectors preserve the four system families and eight real applications.
   Visible labels use application and model-family names only, not numbered
@@ -67,10 +73,13 @@ New engineering estimates require their actual as-of date.
 - **Application Roadmap and Progress** follows the supplied five-stage diagram:
   specification, qubit fit, logical operations, correctness, and hardware
   demonstration. Initial statuses describe the evidence supplied, not invented
-  completion percentages. A stage can be edited in Engineering > Roadmap.
+  completion percentages. Use **Edit roadmap** on Overview to edit a stage.
+  Both selected-application and global Overview read the same saved record.
 - Resource details & assumptions retains physical current/target counts, the
   movement-excluded operation ratio, qubit overhead, timing/gate definitions,
-  source and the full note. Compare retains both eight-candidate scatter plots.
+  source and the full note. **Resource footprint** retains both eight-candidate
+  scatter plots under the heading **Logical and physical resource requirements**.
+  It describes resource requirements, not an application ranking or benchmark.
 - **Updates & outlook** starts empty rather than retaining fictional notes.
   Engineers can create/edit/reorder/archive/restore up to four active briefing
   bullets and manage milestones. Outlook uses **sprints or flexible planning
@@ -80,11 +89,43 @@ New engineering estimates require their actual as-of date.
   tab and global metric mode. It never embeds private counts, notes, owners or
   the database. A private estimate is explicitly replaced with a link to its
   original supplied snapshot; it is not presented as publicly published data.
+  The old `#compare` route still opens Resource footprint. `#edit`, `#write`,
+  `#roadmap` and `#guide` links remain valid; old `mode=leadership` and
+  `mode=engineering` parameters are accepted without granting edit capability.
 
-## Private raw-input database
+### Source roadmap colors
+
+The original **Application Roadmap and Progress** screenshot has SHA-256
+`f76c0f0eef3f28ca542a3fa33dc5922517d505fa47898c396da763cf32c99ce7`
+(the `roadmap` source in `src/data.json`). Its stage-marker pixels supply the
+following exact defaults:
+
+| Stage | Source color |
+|---|---|
+| Application specification | Green `#107C10` |
+| Will it fit? (qubit count) | Green `#107C10` |
+| Will it run? (logical operations) | Amber `#A67A00` |
+| Will it give the right answer? | Red `#C00000` |
+| Hardware demonstration | Blue `#0F6CBD` |
+
+**Edit roadmap > Stage color** provides labeled radio presets, a live preview,
+and **Use default**. Color is a presentation attribute: changing it never changes
+the stage's assessment, evidence, owner, or completion state. Text remains
+readable independently of color. The original evidence assessments and
+Clifford-rounding caveat are preserved.
+
+The optional roadmap `color` accepts only `default`, `green`, `amber`, `red`, or
+`blue`; omission in older records means the source default. There is no database
+schema migration or automatic record rewrite. Saves retain the previous record
+in revision history and the exact raw submission in the audit ledger. Stale
+writes and invalid colors are rejected atomically. Local color changes do not
+alter the published source-default snapshot.
+
+## Editing and saved inputs
 
 GitHub Pages serves a read-only published snapshot. It does not host or expose
-the private database, and its engineering Save controls are disabled.
+the local database. Opening an old editor URL there explains that the review is
+view only rather than displaying a nonfunctional Save form.
 
 Use the dependency-free local workspace for durable engineering entry:
 
@@ -94,7 +135,8 @@ python .\resource-estimates\server.py `
   --port 8765
 ```
 
-Open **http://127.0.0.1:8765/**, then choose Engineering.
+Open **http://127.0.0.1:8765/**, then use the relevant **Edit** action on the
+reading page. The same reading navigation stays visible inside every editor.
 
 - The server binds to loopback only; the SQLite file must be outside the
   repository/served directory. Do not place or commit a live database under
@@ -104,7 +146,7 @@ Open **http://127.0.0.1:8765/**, then choose Engineering.
   including scientific-notation or grouped input, are preserved separately
   from normalized exact values. Original snapshots and earlier written
   revisions remain in history.
-- **Engineering > Raw data** shows saved submissions and offers complete JSON
+- **Raw data**, available in the local navigation, shows saved submissions and offers complete JSON
   export and a consistent SQLite database download. Both are private local
   endpoints. Back up the database; browser reload is not a reset.
 - Revision checks reject stale writes from a second tab rather than overwrite
@@ -122,12 +164,28 @@ are not organizational sign-in, per-user authorization, disk encryption or
 protection against another process with access to the same local account.
 A shared multi-computer deployment needs approved hosting, authentication and
 backups; do not expose this server by changing its binding or adding a tunnel.
-The workspace navigation switch is not access control.
+Edit actions reflect actual local service capability, not a claimed organizational
+role. This build has no organizational viewer/editor identity.
 
 Private saves do **not** automatically publish to GitHub. Public updates require
 an explicit review of which snapshot data may be released, followed by rebuilding
 the static artifact. Never copy a raw database export wholesale into the public
 source or attach private engineer submissions to a public issue.
+
+### Future native SharePoint rebuild
+
+The intended SharePoint version will use native pages and site/list permissions
+so engineers can edit and leadership can view. That rebuild and permission setup
+have **not** happened in this repository. Creating a restricted SharePoint site
+does not protect the existing public GitHub Pages URL or an embedded copy of it.
+This task creates no Azure app registration, changes no tenant/site permissions,
+and does not make this standalone HTML a native SharePoint page. The current
+loopback-only service, Origin/token/revision checks and separate database remain
+unchanged apart from validated optional roadmap colors.
+Until that cutover, viewing still uses the GitHub Pages snapshot and durable
+editing still uses the local Python/SQLite service. A native SharePoint rebuild
+must replace both dependencies. No dashboard, repository, Pages configuration,
+database, backup, or worktree is retired by these preparation changes.
 
 ## Standalone build
 
@@ -165,7 +223,10 @@ never write to the engineer's real database. Coverage includes all 56 supplied
 counts and real names, honest history, source qualifiers, links/back-forward,
 keyboard point details, distinct global series, exact raw-input persistence,
 atomic invalid saves, stale revisions, editor/history/limits, sprint targets,
-roadmap propagation, restart persistence and responsive layouts.
+roadmap propagation, restart persistence and responsive layouts. Additional
+checks cover shared reading navigation, capability-gated edit actions, legacy
+routes/mode links, source/default palette mapping, independent color/status
+editing, color audit/history and conflicts, and selected/global synchronization.
 
 Set `REVIEW_ARTIFACTS` to a directory outside the repository and add `--visual`
 for desktop/mobile screenshots and a JSON result report. Set `DASHBOARD_URL`

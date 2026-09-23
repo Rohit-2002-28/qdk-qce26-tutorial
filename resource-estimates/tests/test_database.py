@@ -421,6 +421,74 @@ class DatabaseTests(FixtureCase):
         update.update(body="New update", owner="Test operator", local=True, savedAt="2026-09-23T18:00:00Z")
         self.assertEqual(self.database.save(0, proposed, {"kind": "update", "raw": "New update"})["data"], proposed)
 
+    def test_legacy_roadmap_without_colors_is_preserved_on_save_and_restart(self):
+        self.assertTrue(all("color" not in stage for stage in self.initial["roadmap"]))
+        proposed = with_snapshot(self.initial)
+        result = self.database.save(0, proposed, {"kind": "estimates", "raw": "unchanged roadmap"})
+        self.assertEqual(result["data"]["roadmap"], self.initial["roadmap"])
+        restarted = self.open_database()
+        self.assertEqual(restarted.state()["data"]["roadmap"], self.initial["roadmap"])
+        with restarted.connection() as connection:
+            self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], server.DATABASE_VERSION)
+
+    def test_roadmap_palette_and_default_persist_without_changing_status(self):
+        state = self.database.state()
+        for color in ("green", "amber", "red", "blue", "default"):
+            with self.subTest(color=color):
+                proposed = copy.deepcopy(state["data"])
+                stage = proposed["roadmap"][2]
+                before = {key: copy.deepcopy(value) for key, value in stage.items() if key != "revisions"}
+                stage["revisions"].append(before)
+                stage.update(color=color, owner="Test operator", note="Existing evidence; color is presentation only.")
+                state = self.database.save(state["revision"], proposed, {"kind": "roadmap", "raw": {"color": color}})
+                self.assertEqual(state["data"]["roadmap"][2]["status"], "Not assessed")
+                self.assertEqual(state["data"]["roadmap"][2]["revisions"][-1], before)
+                self.assertEqual(self.database.records()["records"][-1]["raw"]["color"], color)
+        self.assertEqual(self.open_database().state(), state)
+        self.assertEqual(state["data"]["roadmap"][2]["color"], "default")
+        self.assertNotIn("color", state["data"]["roadmap"][2]["revisions"][1])
+
+    def test_roadmap_invalid_colors_reject_atomically(self):
+        for color in ("", "#107c10", "url(https://example.invalid)", "Green", "purple", None, 42, [], {}):
+            with self.subTest(color=color):
+                proposed = copy.deepcopy(self.initial)
+                proposed["roadmap"][0].update(color=color, owner="Test operator", note="Evidence unchanged")
+                self.assert_rejected(proposed, "color")
+
+    def test_roadmap_color_change_requires_previous_version(self):
+        proposed = copy.deepcopy(self.initial)
+        stage = proposed["roadmap"][0]
+        stage.update(color="blue", owner="Test operator", note="Existing assessment")
+        self.assert_rejected(proposed, "complete previous roadmap record")
+        stage["revisions"].append({"color": "default"})
+        self.assert_rejected(proposed, "complete previous roadmap record")
+        stage["revisions"][-1] = {key: copy.deepcopy(value) for key, value in self.initial["roadmap"][0].items() if key != "revisions"}
+        self.database.save(0, proposed, {"kind": "roadmap", "raw": {"color": "blue"}})
+        changed = self.database.state()["data"]
+        changed["roadmap"][0]["revisions"][-1]["note"] = "Rewritten history"
+        self.assert_rejected(changed, "revisions are immutable")
+
+    def test_roadmap_color_in_new_revision_is_validated(self):
+        proposed = copy.deepcopy(self.initial)
+        proposed["roadmap"][0]["revisions"].append({"color": "#ffffff"})
+        self.assert_rejected(proposed, "color")
+
+    def test_stale_color_change_cannot_overwrite_saved_color_or_audit(self):
+        def changed(color):
+            proposed = copy.deepcopy(self.initial)
+            stage = proposed["roadmap"][0]
+            stage["revisions"].append({key: copy.deepcopy(value) for key, value in stage.items() if key != "revisions"})
+            stage.update(color=color, owner="Test operator", note="Existing assessment")
+            return proposed
+
+        first = self.database.save(0, changed("red"), {"kind": "roadmap", "raw": {"color": "red"}})
+        records = self.database.records()
+        with self.assertRaises(server.APIError) as caught:
+            self.open_database().save(0, changed("blue"), {"kind": "roadmap", "raw": {"color": "blue"}})
+        self.assertEqual(caught.exception.status, 409)
+        self.assertEqual(self.database.state(), first)
+        self.assertEqual(self.database.records(), records)
+
     def test_archive_does_not_invent_historical_owners(self):
         proposed = copy.deepcopy(self.initial)
         proposed["updates"][0]["archived"] = True

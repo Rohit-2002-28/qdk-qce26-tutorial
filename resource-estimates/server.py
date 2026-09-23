@@ -44,6 +44,9 @@ Otherwise, a milestone needs its own planning window. Archiving alone
 does not require inventing missing historical attribution.
 There is no reset or delete endpoint. Reloading discards unsaved client edits,
 not persisted estimates, written history, or raw events.
+Roadmap color is optional: omission or "default" uses the source stage color.
+Only green, amber, red, blue, and default are accepted; a color change must
+append the previous record to history and never changes an assessment itself.
 
 GET /api/records?limit=50&offset=0 inspects raw actions (limit 1..200).
 GET /api/export downloads the state and every raw action.
@@ -87,6 +90,7 @@ ROADMAP_IDS = ("specification", "qubits", "operations", "correctness", "hardware
 MATURITIES = ("Unspecified", "Provisional", "Reviewed")
 MILESTONE_STATUSES = ("Planned", "In progress", "Blocked", "Exploratory", "Done")
 ROADMAP_STATUSES = ("Evidence supplied", "Not assessed", "In progress", "Blocked", "Complete")
+ROADMAP_COLORS = ("default", "green", "amber", "red", "blue")
 MAX_JSON_BYTES = 8 * 1024 * 1024
 MAX_RECORDS = 10_000
 MAX_COUNT_DIGITS = 4096
@@ -487,10 +491,14 @@ def validate_state(data: Any, previous: dict[str, Any] | None = None) -> None:
         path = f"roadmap.{record_id}"
         string_value(record.get("title"), f"{path}.title", required=True)
         enum_value(record.get("status"), ROADMAP_STATUSES, f"{path}.status")
+        if "color" in record:
+            enum_value(record["color"], ROADMAP_COLORS, f"{path}.color")
         string_value(record.get("note"), f"{path}.note")
         string_value(record.get("owner"), f"{path}.owner", limit=200)
         string_value(record.get("window"), f"{path}.window", limit=MAX_WINDOW_LENGTH)
-        revision_list(record, path, optional=True)
+        for index, revision in enumerate(revision_list(record, path, optional=True)):
+            if "color" in revision:
+                enum_value(revision["color"], ROADMAP_COLORS, f"{path}.revisions[{index}].color")
         local_metadata(record, path)
 
     if previous is not None:
@@ -526,6 +534,10 @@ def validate_history(previous: dict[str, Any], proposed: dict[str, Any]) -> None
                 old_revisions, revisions[:len(old_revisions)]
             ):
                 invalid(path, "existing written revisions are immutable and cannot be dropped or reordered")
+            if collection == "roadmap" and old and old.get("color", "default") != record.get("color", "default"):
+                prior_version = {key: value for key, value in old.items() if key != "revisions"}
+                if len(revisions) == len(old_revisions) or not same_json(revisions[len(old_revisions)], prior_version):
+                    invalid(path, "a color change must append the complete previous roadmap record to revision history")
             ignored = {"revisions", "local", "savedAt", "archived"}
             content = {key: value for key, value in record.items() if key not in ignored}
             old_content = {key: value for key, value in old.items() if key not in ignored} if old else None

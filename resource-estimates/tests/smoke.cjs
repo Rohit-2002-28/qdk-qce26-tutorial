@@ -22,6 +22,12 @@ const expected = {
   "4c": ["6232", "1698744", "742", "2631", "2859", "9", "220"]
 };
 const expectedIds = ["1a", "1b", "2", "3a", "3b", "4a", "4b", "4c"];
+const readingTabs = ["Overview", "Resource footprint", "All metrics", "Updates & outlook"];
+const sourceColors = {
+  specification: ["green", "rgb(16, 124, 16)"], qubits: ["green", "rgb(16, 124, 16)"],
+  operations: ["amber", "rgb(166, 122, 0)"], correctness: ["red", "rgb(192, 0, 0)"],
+  hardware: ["blue", "rgb(15, 108, 189)"]
+};
 let browser;
 const urlFor = (route, params = {}, origin = base) => {
   const url = new URL(origin);
@@ -31,7 +37,10 @@ const urlFor = (route, params = {}, origin = base) => {
 };
 const text = async (page, selector) => (await page.locator(selector).innerText()).replace(/\s+/g, " ").trim();
 const nav = (page, route) => page.locator(`.main-nav [data-route="${route}"]`).click();
-const mode = (page, name) => page.locator(`[data-mode="${name}"]`).click();
+const editFrom = async (page, route = "edit") => {
+  await nav(page, route === "write" ? "updates" : route === "edit" ? "metrics" : "overview");
+  await page.locator(`[data-edit-route="${route}"]`).first().click();
+};
 const field = (page, key) => page.locator(`[data-written="${key}"]`);
 const contextField = (page, key) => page.locator(`[data-context="${key}"]`);
 const countField = (page, key, id = "1a") => page.locator(`[data-workload-id="${id}"][data-field="${key}"]`);
@@ -40,6 +49,17 @@ const snapshot = async (page, id) => {
   await page.selectOption("#snapshot-select", id);
 };
 const details = page => page.locator("#resource-details > summary").click();
+const contrastRatio = (first, second) => {
+  const luminance = color => {
+    const [red, green, blue] = color.match(/\d+(?:\.\d+)?/g).slice(0, 3).map(value => {
+      const component = Number(value) / 255;
+      return component <= 0.04045 ? component / 12.92 : ((component + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const a = luminance(first), b = luminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
 
 async function open(url = urlFor("overview"), options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
@@ -79,6 +99,9 @@ async function suppliedData() {
     assert.equal(data.updates.length, 0);
     assert.equal(data.milestones.length, 0);
     assert.equal(await page.locator("body").getAttribute("data-storage"), "read-only");
+    assert.equal(await text(page, "#storage-caption"), "Published review - view only");
+    assert.equal(await page.locator("[data-mode],.demo-switch,[data-edit-route]").count(), 0);
+    assert.deepEqual(await page.locator(".main-nav a").allTextContents(), readingTabs);
     assert.deepEqual(await page.locator("[data-metric]").allTextContents(), ["638", "9"]);
     assert.ok(!/Dummy|fictional|120M|App 1a/.test(await text(page, "body")));
     const order = await page.locator(".candidate-controls select").evaluateAll(selects => selects.map(select => select.id));
@@ -91,6 +114,23 @@ async function suppliedData() {
     assert.equal(await page.locator(".roadmap-stages > li").count(), 5);
     assert.match(await text(page, ".roadmap-panel"), /Application Roadmap and Progress/);
     assert.equal(await page.locator(".stage-status").getByText("Complete", { exact: true }).count(), 0);
+    for (const [id, [name, color]] of Object.entries(sourceColors)) {
+      assert.equal(await page.locator(`[data-roadmap-stage="${id}"]`).getAttribute("data-color"), name);
+      assert.equal(await page.locator(`[data-roadmap-stage="${id}"] .stage-marker`).evaluate(element => getComputedStyle(element).backgroundColor), color);
+    }
+    const contrast = await page.locator(".roadmap-stages").evaluate(element => ({
+      background: getComputedStyle(document.documentElement).backgroundColor,
+      title: getComputedStyle(element.querySelector(".stage-title")).color,
+      status: getComputedStyle(element.querySelector(".stage-status")).color
+    }));
+    assert.ok(contrastRatio(contrast.title, contrast.background) >= 4.5);
+    assert.ok(contrastRatio(contrast.status, contrast.background) >= 4.5);
+    for (const [, color] of Object.values(sourceColors)) assert.ok(contrastRatio(color, contrast.background) >= 3, "Source stage markers retain non-text contrast.");
+    const assessments = await page.locator(".stage-status").allTextContents();
+    await page.selectOption("#overview-mode", "global");
+    assert.deepEqual(await page.locator(".stage-status").allTextContents(), assessments);
+    assert.deepEqual(await page.locator("[data-roadmap-stage]").evaluateAll(stages => stages.map(stage => stage.dataset.color)), ["green", "green", "amber", "red", "blue"]);
+    await page.selectOption("#overview-mode", "candidate");
     await details(page);
     assert.match(await text(page, "#resource-details"), /324,305/);
     assert.match(await text(page, "#resource-details"), /nearest pi\/2 multiple/);
@@ -102,12 +142,12 @@ async function suppliedData() {
     await nav(page, "updates");
     assert.equal(await page.locator("[data-update-id],[data-milestone-id]").count(), 0);
     assert.match(await text(page, "main"), /sprint-based plans/);
-    await mode(page, "engineering");
-    assert.ok(await page.locator("#save-updates").isDisabled());
-    assert.ok(await countField(page, "logicalOps").isDisabled());
-    await nav(page, "records");
+    await page.goto(urlFor("edit", { mode: "engineering" }));
+    assert.match(await text(page, "main"), /Published review.*view only/);
+    assert.equal(await page.locator("#save-updates,[data-field]").count(), 0);
+    await page.goto(urlFor("records"));
     assert.equal(await page.locator('a[href="/api/database"]').count(), 0);
-    assert.match(await text(page, "main"), /does not expose the raw-input database/);
+    assert.match(await text(page, "main"), /does not expose raw submissions or database exports/);
   } finally { await context.close(); }
 }
 
@@ -124,6 +164,8 @@ async function links() {
     assert.deepEqual(await fresh.page.locator("[data-metric]").allTextContents(), ["1.1K", "9"]);
     await fresh.context.close();
     await nav(page, "compare");
+    assert.equal(await text(page, "h1"), "Logical and physical resource requirements");
+    assert.equal(await page.title(), "Resource footprint - Resource estimates");
     await page.goBack();
     assert.equal(page.url(), selected);
     await page.goBack();
@@ -151,6 +193,19 @@ async function links() {
       assert.ok(await page.locator(".unavailable-view").isVisible());
       await page.locator(".unavailable-view a").click();
       assert.equal(await text(page, "h1"), "Resource overview");
+    }
+    for (const route of ["edit", "write", "roadmap", "guide", "compare"]) {
+      for (const legacyMode of ["engineering", "leadership"]) {
+        await page.goto(urlFor(route, { mode: legacyMode, candidate: "3b", system: "3" }));
+        await page.locator("h1").waitFor();
+        assert.ok(!await page.locator('[role="alert"]').count(), `Known legacy ${route}/${legacyMode} URL must recover safely.`);
+        assert.equal(new URL(page.url()).hash, `#${route}`);
+        assert.equal(new URL(page.url()).searchParams.get("candidate"), "3b");
+        assert.equal(new URL(page.url()).searchParams.has("mode"), false);
+        assert.deepEqual(await page.locator(".main-nav a").allTextContents(), readingTabs);
+        assert.equal(await page.locator("[data-edit-route]").count(), 0);
+        if (["edit", "write", "roadmap"].includes(route)) assert.equal(await page.locator("form,input,textarea").count(), 1, "Only the shared readonly link field exists; editor inputs are absent.");
+      }
     }
   } finally { await context.close(); }
 }
@@ -262,10 +317,10 @@ async function responsive() {
       for (const view of ["overview", "global", "compare", "roadmap"]) {
         if (view === "global") await page.selectOption("#overview-mode", "global");
         if (view === "compare") await nav(page, "compare");
-        if (view === "roadmap") { await mode(page, "engineering"); await nav(page, "roadmap"); }
+        if (view === "roadmap") { await page.goto(urlFor("roadmap", { mode: "engineering" })); }
         const layout = await page.evaluate(() => ({
           width: innerWidth, scrollWidth: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight,
-          small: [...document.querySelectorAll(".estimate-meta,.chart-caption,.stage-title,.stage-status,.series-legend label,.field-hint,.comparison-caption")]
+          small: [...document.querySelectorAll(".estimate-meta,.chart-caption,.stage-title,.stage-status,.series-legend label,.field-hint,.comparison-caption,.roadmap-color-options label")]
             .filter(element => element.getClientRects().length && parseFloat(getComputedStyle(element).fontSize) < 12).map(element => element.className)
         }));
         assert.ok(layout.scrollWidth <= width + 1, `${view} overflow at ${width}px: ${layout.scrollWidth}`);
@@ -321,6 +376,110 @@ async function stopServer(child) {
   await exited;
 }
 
+async function roadmapColorWorkflow(page, origin) {
+  const stateFromServer = () => page.request.get(`${origin}api/state`).then(response => response.json());
+  const colorControl = color => page.locator(`[data-roadmap="color"][value="${color}"]`);
+  const saveColor = async () => {
+    const response = page.waitForResponse(response => response.url().endsWith("/api/save") && response.request().method() === "POST");
+    await page.locator("#save-roadmap").click();
+    assert.equal((await response).status(), 200);
+    await page.waitForFunction(() => !document.querySelector("main").hasAttribute("aria-busy") && document.getElementById("roadmap-stage")?.value === "specification");
+  };
+  const savedAssessment = (await stateFromServer()).data.roadmap.find(stage => stage.id === "correctness");
+  assert.equal(savedAssessment.color, undefined, "Existing records need no color migration.");
+  await editFrom(page, "roadmap");
+  await page.selectOption("#roadmap-stage", "correctness");
+  assert.ok(await colorControl("default").isChecked());
+  assert.match(await text(page, "#roadmap-color-preview"), /Red \(source default\).*In progress/);
+  const beforeCancel = (await stateFromServer()).revision;
+  await colorControl("green").check();
+  await colorControl("green").press("ArrowRight");
+  assert.ok(await colorControl("amber").isChecked(), "The labeled palette supports keyboard selection.");
+  assert.match(await text(page, "#roadmap-color-preview"), /Amber.*In progress/);
+  assert.equal(await page.inputValue('[data-roadmap="status"]'), "In progress");
+  await nav(page, "overview");
+  await page.locator("#discard-dialog").waitFor({ state: "visible" });
+  await page.locator("#keep-editing").click();
+  assert.ok(await colorControl("amber").isChecked());
+  await page.locator('[data-action="cancel-roadmap"]').click();
+  await page.locator("#discard-edits").click();
+  assert.equal((await stateFromServer()).revision, beforeCancel);
+  await page.selectOption("#roadmap-stage", "correctness");
+  assert.ok(await colorControl("default").isChecked());
+
+  await colorControl("green").evaluate(input => {
+    input.value = "purple";
+    input.checked = true;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.locator("#save-roadmap").click();
+  assert.match(await text(page, "#roadmap-errors"), /listed stage color/);
+  assert.equal((await stateFromServer()).revision, beforeCancel);
+  await page.locator('[data-roadmap="color"][value="purple"]').evaluate(input => { input.value = "green"; });
+  await colorControl("red").check();
+  await colorControl("green").check();
+  await saveColor();
+  const green = (await stateFromServer()).data.roadmap.find(stage => stage.id === "correctness");
+  assert.equal(green.color, "green");
+  assert.equal(green.status, savedAssessment.status);
+  assert.equal(green.note, savedAssessment.note);
+  assert.equal(green.revisions.at(-1).color, undefined, "Prior record without color remains intact.");
+  const raw = await page.request.get(`${origin}api/records`).then(response => response.json());
+  assert.equal(raw.records.filter(record => record.kind === "roadmap").at(-1).raw.color, "green");
+  await page.reload();
+  await page.locator("#roadmap-stage").waitFor();
+  await page.selectOption("#roadmap-stage", "correctness");
+  assert.ok(await colorControl("green").isChecked());
+  await nav(page, "overview");
+  for (const overviewMode of ["candidate", "global"]) {
+    await page.selectOption("#overview-mode", overviewMode);
+    assert.equal(await page.locator('[data-roadmap-stage="correctness"]').getAttribute("data-color"), "green");
+    assert.equal(await text(page, '[data-roadmap-stage="correctness"] .stage-status'), "In progress");
+  }
+  assert.equal(await page.evaluate(() => window.RESOURCE_DATA.roadmap.find(stage => stage.id === "correctness").color), undefined, "Local edits must not modify the published seed.");
+
+  await editFrom(page, "roadmap");
+  await page.selectOption("#roadmap-stage", "correctness");
+  await colorControl("default").check();
+  await saveColor();
+  const restored = (await stateFromServer()).data.roadmap.find(stage => stage.id === "correctness");
+  assert.equal(restored.color, "default");
+  assert.equal(restored.revisions.at(-1).color, "green");
+  assert.equal(restored.status, savedAssessment.status);
+  await nav(page, "overview");
+  assert.equal(await page.locator('[data-roadmap-stage="correctness"]').getAttribute("data-color"), "red");
+  await page.selectOption("#overview-mode", "candidate");
+  assert.equal(await page.locator('[data-roadmap-stage="correctness"]').getAttribute("data-color"), "red");
+
+  const concurrent = await open(urlFor("roadmap", { mode: "engineering" }, origin));
+  try {
+    await concurrent.page.selectOption("#roadmap-stage", "correctness");
+    await concurrent.page.locator('[data-roadmap="color"][value="blue"]').check();
+    await editFrom(page, "roadmap");
+    await page.selectOption("#roadmap-stage", "correctness");
+    await colorControl("amber").check();
+    await saveColor();
+    await concurrent.page.locator("#save-roadmap").click();
+    await concurrent.page.locator(".inline-message.error").waitFor();
+    assert.match(await text(concurrent.page, ".inline-message.error"), /Save not confirmed.*State changed/);
+    assert.ok(await concurrent.page.locator('[data-roadmap="color"][value="blue"]').isChecked(), "Stale color draft is retained for recovery.");
+    const current = await stateFromServer();
+    assert.equal(current.data.roadmap.find(stage => stage.id === "correctness").color, "amber");
+  } finally { await concurrent.context.close(); }
+
+  if (artifacts && process.argv.includes("--visual")) {
+    await page.selectOption("#roadmap-stage", "correctness");
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.evaluate(() => scrollTo(0, 0));
+      await page.screenshot({ path: path.join(artifacts, `${width}-roadmap-editor.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+  await nav(page, "overview");
+}
+
 async function privateWorkspace() {
   const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "resource-estimates-check-"));
   const database = path.join(temporary, "inputs.sqlite");
@@ -328,8 +487,14 @@ async function privateWorkspace() {
   let service = await startServer(database, port);
   const { context, page } = await open(service.origin);
   try {
-    assert.equal(await page.locator("body").getAttribute("data-storage"), "private");
-    await mode(page, "engineering");
+    assert.equal(await page.locator("body").getAttribute("data-storage"), "local");
+    assert.equal(await text(page, "#storage-caption"), "Local editing workspace");
+    assert.equal(await page.locator("[data-mode],.demo-switch").count(), 0);
+    assert.deepEqual(await page.locator(".main-nav a").allTextContents(), [...readingTabs, "Raw data"]);
+    assert.ok(await page.locator('[data-edit-route="edit"]').isVisible());
+    assert.ok(await page.locator('[data-edit-route="roadmap"]').isVisible());
+    await editFrom(page);
+    assert.deepEqual(await page.locator(".main-nav a").allTextContents(), [...readingTabs, "Raw data"]);
     await page.fill("#estimate-date", "2026-09-23");
     await page.fill("#change-note", "Test-only saved estimate; not published.");
     await countField(page, "logicalOps").fill("1.5");
@@ -355,11 +520,10 @@ async function privateWorkspace() {
     const publicUrl = await page.inputValue("#share-url");
     assert.equal(new URL(publicUrl).searchParams.get("snapshot"), "source-1a-v2");
     assert.ok(!publicUrl.includes("Test") && !publicUrl.includes("325000"));
-    assert.match(await text(page, "#share-copy"), /private database records/);
+    assert.match(await text(page, "#share-copy"), /Locally saved changes are not available/);
     await page.locator('[data-action="close-share"]').click();
     await nav(page, "compare");
     assert.equal(await page.locator("[data-scatter='operations'] [data-point='1a']").getAttribute("data-x"), "640");
-    await mode(page, "engineering");
     await nav(page, "records");
     assert.match(await text(page, ".raw-records"), /6.4e2|estimates/);
     const rawResponse = await page.request.get(`${service.origin}api/records`).then(response => response.json());
@@ -368,7 +532,7 @@ async function privateWorkspace() {
     assert.equal(submission.raw.rows[0].metrics.physicalOps, "325,000");
     assert.equal((await page.request.get(`${service.origin}api/database`)).status(), 200);
     assert.equal((await page.request.get(`${service.origin}api/export`)).status(), 200);
-    await nav(page, "edit");
+    await editFrom(page);
     await page.fill("#estimate-date", "2026-09-30");
     await page.fill("#change-note", "Test-only second dated estimate.");
     await countField(page, "logicalOps").fill("1280");
@@ -383,8 +547,7 @@ async function privateWorkspace() {
     assert.match(await text(page, ".goal-line"), /200 target.*Next sprint.*30 above target; 15%/);
     await page.selectOption("#overview-mode", "global");
     assert.equal(await page.locator("[data-series='1a']").count(), 1);
-    await mode(page, "engineering");
-    await nav(page, "write");
+    await editFrom(page, "write");
     for (let i = 1; i <= 4; i++) {
       await page.locator('[data-action="new-written"]').click();
       await field(page, "title").fill(`Test briefing ${i}`);
@@ -422,26 +585,25 @@ async function privateWorkspace() {
     assert.match(await text(page, "#linked-target-preview"), /200 physical-qubit objective.*Next sprint/);
     await page.locator("#written-form button[type='submit']").click();
     await page.locator("#written-form").waitFor({ state: "detached" });
-    await mode(page, "leadership");
     await nav(page, "updates");
     assert.equal(await page.locator("[data-update-id]").count(), 4);
     assert.match(await text(page, ".milestones"), /Next sprint.*Test sprint milestone/);
-    await mode(page, "engineering");
-    await nav(page, "roadmap");
+    await editFrom(page, "roadmap");
     await page.selectOption("#roadmap-stage", "correctness");
     await page.selectOption('[data-roadmap="status"]', "In progress");
     await page.fill('[data-roadmap="owner"]', "Test engineer");
     await page.fill('[data-roadmap="note"]', "Test-only correctness assessment.");
     await page.fill('[data-roadmap="window"]', "Next sprint");
     await page.locator("#save-roadmap").click();
-    await page.locator(".inline-message.success").filter({ hasText: "Roadmap status saved" }).waitFor();
-    await mode(page, "leadership");
+    await page.locator(".inline-message.success").filter({ hasText: "Roadmap assessment and color saved" }).waitFor();
+    await nav(page, "overview");
     assert.match(await text(page, "[data-roadmap-stage='correctness']"), /In progress/);
+    await roadmapColorWorkflow(page, service.origin);
     const firstWindow = await open(urlFor("edit", {}, service.origin));
     await firstWindow.page.fill("#estimate-date", "2026-10-01");
     await firstWindow.page.fill("#change-note", "Stale window must not overwrite.");
     await countField(firstWindow.page, "logicalOps").fill("1300");
-    await mode(page, "engineering");
+    await editFrom(page);
     await page.fill("#estimate-date", "2026-10-01");
     await page.fill("#change-note", "Concurrent current save.");
     await countField(page, "logicalOps").fill("1290");
@@ -461,6 +623,8 @@ async function privateWorkspace() {
     assert.equal(response.revision, revision);
     assert.equal(response.data.workloads[0].snapshots.at(-1).metrics.logicalOps, "1290");
     assert.ok(response.data.workloads[0].snapshots.some(record => record.id === "source-1a-v2"));
+    assert.equal(response.data.roadmap.find(stage => stage.id === "correctness").color, "amber", "Color survives service restart.");
+    assert.equal(response.data.roadmap.find(stage => stage.id === "correctness").status, "In progress");
     assert.ok(localUrl.includes("saved-"));
   } finally {
     await context.close();

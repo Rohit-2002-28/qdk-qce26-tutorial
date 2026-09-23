@@ -4,7 +4,8 @@
   const DATA = window.RESOURCE_DATA;
   const fields = DATA.fields;
   const routes = new Set(["overview", "compare", "metrics", "updates", "edit", "write", "roadmap", "records", "guide"]);
-  const engineeringRoutes = new Set(["edit", "write", "roadmap", "records", "guide"]);
+  const editorRoutes = new Set(["edit", "write", "roadmap"]);
+  const readingRoute = view => ({ edit: "metrics", write: "updates", roadmap: "overview", guide: "overview" }[view] || view);
   const main = document.getElementById("main");
   const dialog = document.getElementById("discard-dialog");
   const state = {
@@ -115,7 +116,7 @@
 
   async function connectDatabase() {
     if (location.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(location.hostname)) return;
-    main.innerHTML = '<p role="status">Opening the private engineering database...</p>';
+    main.innerHTML = '<p role="status">Loading saved workspace data...</p>';
     try {
       const result = await apiResponse(await fetch("/api/state", { cache: "no-store", signal: AbortSignal.timeout(6000) }));
       if (!result.data || !Number.isInteger(result.revision) || !result.token) throw new Error("The local server returned an invalid database response.");
@@ -123,7 +124,7 @@
       Object.assign(storage, { connected: true, revision: result.revision, token: result.token });
       await refreshRecords();
     } catch (error) {
-      storage.error = `Private database unavailable: ${error.message}. No engineering saves are enabled. Start the documented local workspace server.`;
+      storage.error = `Editing is unavailable: ${error.message}. Viewing the published snapshot instead. Check the local workspace server before saving.`;
       state.notice = storage.error;
       state.noticeType = "error";
     }
@@ -131,7 +132,7 @@
 
   async function persist(data, kind, raw) {
     if (!storage.connected || storage.saving) {
-      state.notice = storage.saving ? "A database save is still in progress." : "Read-only snapshot. Start the private local workspace to save engineering data.";
+      state.notice = storage.saving ? "A save is still in progress." : "This published review is view only. Editing is available in the local editing workspace.";
       state.noticeType = "error";
       render();
       return false;
@@ -139,7 +140,7 @@
     storage.saving = true;
     main.inert = true;
     main.setAttribute("aria-busy", "true");
-    announce("Saving raw inputs and the revision to the private database.");
+    announce("Saving changes and revision history.");
     try {
       const result = await apiResponse(await fetch("/api/save", {
         method: "POST",
@@ -163,10 +164,12 @@
     }
   }
 
-  function storageNotice() {
-    return storage.connected
-      ? inlineInfo("<strong>Private local workspace.</strong> Save writes exact inputs and retained revisions to SQLite on this computer. It does not publish them to GitHub Pages.")
-      : inlineInfo("<strong>Read-only published snapshot.</strong> Engineer saves require the private local workspace. No private database or write credential is exposed by this website.");
+  function editAction(view, label) {
+    return storage.connected ? `<a class="button small" data-nav data-edit-route="${view}" href="${escape(urlFor(view))}">${label}</a>` : "";
+  }
+
+  function readOnlyEditor(title, returnView, returnLabel) {
+    return `<section class="sheet unavailable-view"><h1>${title}</h1><p>Published review &mdash; view only. Editing is available when this dashboard is opened in the local editing workspace.</p><a class="button" data-nav href="${escape(urlFor(returnView))}">${returnLabel}</a></section>`;
   }
 
   function urlFor(view = state.view, options = {}) {
@@ -180,7 +183,6 @@
     url.searchParams.set("system", options.filter ?? state.filter);
     url.searchParams.set("snapshot", snapshot.id);
     url.searchParams.set("config", snapshot.config);
-    url.searchParams.set("mode", engineeringRoutes.has(view) ? "engineering" : "leadership");
     const overviewMode = options.overviewMode ?? state.overviewMode;
     const globalMetric = options.globalMetric ?? state.globalMetric;
     if (overviewMode === "global") {
@@ -214,10 +216,10 @@
     else if (!item) error = `The candidate "${id}" is not part of this dataset. Older placeholder links cannot be mapped to real applications.`;
     else if (!["all", "1", "2", "3", "4"].includes(filter)) error = `The system filter "${filter}" is not available.`;
     else if (filter !== "all" && String(item.system) !== filter) error = `${item.name} does not belong to ${systemName(filter)}.`;
-    else if (!snapshot) error = `The requested snapshot "${requested}" is unavailable here. A private database snapshot is not automatically part of the published website.`;
+    else if (!snapshot) error = `The requested snapshot "${requested}" is unavailable here. Locally saved estimates are not automatically part of the published review.`;
     else if (params.has("config") && params.get("config") !== snapshot.config) error = `This snapshot uses ${snapshot.config}, not the requested configuration "${params.get("config")}".`;
     else if (!["candidate", "global"].includes(overviewMode) || !["logicalOps", "logicalQubits"].includes(globalMetric)) error = "The requested overview or metric is not supported.";
-    else if (params.has("mode") && params.get("mode") !== (engineeringRoutes.has(view) ? "engineering" : "leadership")) error = "The requested workspace does not match this tab.";
+    else if (params.has("mode") && !["engineering", "leadership"].includes(params.get("mode"))) error = "The legacy view parameter is not recognized.";
     return {
       view: routes.has(view) ? view : "overview", selected: item ? id : DATA.workloads[0].id,
       filter: error ? "all" : filter, snapshot: snapshot?.id || published(item ? id : DATA.workloads[0].id).id,
@@ -550,15 +552,20 @@
     const selected = state.globalPoint;
     return `<section class="overview-surface global-overview" aria-labelledby="global-heading"><div class="global-heading"><div><h2 id="global-heading">${label} across all applications</h2><p>Independent candidates, not a combined total.</p></div><label class="field"><span>Metric</span><select id="global-metric" class="inset-select">${["logicalOps", "logicalQubits"].map(metric => `<option value="${metric}"${key === metric ? " selected" : ""}>${escape(fields.find(field => field.key === metric).label)}</option>`).join("")}</select></label></div>
       <div class="global-chart-body">${values.length ? `<svg class="chart global-chart" data-global-chart="${key}" data-maximum="${maximum}" data-top="${top}" data-bottom="${bottom}" viewBox="0 0 ${width} ${height}" role="group" aria-label="${label} for all applications over supplied estimate dates">${ticks}${plots}${dateTicks}</svg>` : '<p class="chart-empty">No visible dated samples for this selection. Choose a candidate below, or show all candidates.</p>'}
-      <p class="comparison-caption">${hasDated ? dateCount === 1 ? `One supplied estimate date: ${dateLabel(new Date(start).toISOString().slice(0, 10))}. Additional dates are needed to show change over time.` : "Lines connect dated estimates on the same basis only; changed configurations and missing samples break the line." : "One undated source snapshot per application. These markers are a baseline, not a time trend. Add dated estimates in the private engineering workspace to build real history."}${hasDated && undatedCount ? " Original undated imports remain in the exact-data history, not on the time axis." : ""} Coincident markers share their true positions; use the labeled key to isolate candidates.</p>
+      <p class="comparison-caption">${hasDated ? dateCount === 1 ? `One supplied estimate date: ${dateLabel(new Date(start).toISOString().slice(0, 10))}. Additional dates are needed to show change over time.` : "Lines connect dated estimates on the same basis only; changed configurations and missing samples break the line." : "One undated source snapshot per application. These markers are a baseline, not a time trend. Dated engineering estimates are needed to build history."}${hasDated && undatedCount ? " Original undated imports remain in the exact-data history, not on the time axis." : ""} Coincident markers share their true positions; use the labeled key to isolate candidates.</p>
       <div class="series-legend">${series.map(({ item, style, rows }) => `<div><label><input type="checkbox" data-global-visible="${item.id}"${state.globalHidden.has(item.id) ? "" : " checked"}><svg width="42" height="20" aria-hidden="true"><line x1="2" x2="40" y1="10" y2="10" stroke="${style.color}" stroke-width="2.5" stroke-dasharray="${style.dash}"/><g stroke="${style.color}" fill="white" stroke-width="2">${marker(style.shape, 21, 10, 4)}</g></svg><span>${escape(candidateLabel(item))}${hasDated && !rows.length ? ' <small>(undated)</small>' : ""}</span></label><button type="button" class="text-button" data-global-id="${item.id}" data-snapshot="${escape(latest(item).id)}" aria-label="Details for ${escape(item.name)}">Details</button></div>`).join("")}</div>
       <button class="text-button" type="button" data-action="show-all-series">Show all candidates</button><div class="global-point-detail" id="global-point-detail" aria-live="polite">${globalPointDetails(selected?.id, selected?.snapshotId)}</div>
       <details class="global-data"><summary>Exact source counts &amp; dated history</summary><div class="table-scroll" tabindex="0"><table class="data-table"><thead><tr><th scope="col">Application</th><th scope="col">Estimate date</th><th scope="col">Logical operations</th><th scope="col">Logical qubits</th><th scope="col">Configuration</th></tr></thead><tbody>${state.workloads.flatMap(item => ordered(item).map(row => `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${escape(candidateLabel(item))}</a></th><td>${dateLabel(row.asOf)}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${escape(row.config)}</td></tr>`)).join("")}</tbody></table></div></details>
       </div></section>`;
   }
 
+  const roadmapColors = { green: "Green", amber: "Amber", red: "Red", blue: "Blue" };
+  const roadmapSourceDefaults = { specification: "green", qubits: "green", operations: "amber", correctness: "red", hardware: "blue" };
+  const roadmapColor = stage => stage.color === undefined || stage.color === "default" ? roadmapSourceDefaults[stage.id] : stage.color;
+  const roadmapColorLabel = stage => `${roadmapColors[roadmapColor(stage)]}${stage.color === undefined || stage.color === "default" ? " (source default)" : ""}`;
+
   function roadmapSummary() {
-    return `<section class="roadmap-panel" aria-labelledby="roadmap-heading"><h2 id="roadmap-heading">Application Roadmap and Progress</h2><ol class="roadmap-stages">${state.roadmap.map(stage => `<li data-roadmap-stage="${stage.id}"><details><summary><span class="stage-number" aria-hidden="true"></span><span class="stage-title">${escape(stage.title)}</span><span class="stage-status${stage.status === "Blocked" ? " blocked" : ""}">${escape(stage.status)}</span></summary><p>${escape(stage.note)}</p>${stage.owner ? `<p>Owner: ${escape(stage.owner)}</p>` : ""}${stage.window ? `<p>${escape(stage.window)}</p>` : ""}</details></li>`).join("")}</ol><p class="roadmap-caveat">Evidence availability is not a readiness or completion score. Clifford-rounded emulator runs do not establish correctness of the original circuits.</p></section>`;
+    return `<section class="roadmap-panel" aria-labelledby="roadmap-heading"><div class="roadmap-heading"><h2 id="roadmap-heading">Application Roadmap and Progress</h2>${editAction("roadmap", "Edit roadmap")}</div><ol class="roadmap-stages">${state.roadmap.map(stage => `<li data-roadmap-stage="${stage.id}" data-color="${roadmapColor(stage)}"><details><summary><span class="stage-marker" aria-hidden="true"></span><span class="stage-title">${escape(stage.title)}</span><span class="stage-status${stage.status === "Blocked" ? " blocked" : ""}">${escape(stage.status)}</span></summary><p>${escape(stage.note)}</p>${stage.owner ? `<p>Owner: ${escape(stage.owner)}</p>` : ""}${stage.window ? `<p>${escape(stage.window)}</p>` : ""}<p>Stage color: ${roadmapColorLabel(stage)}. Color does not set the assessment.</p></details></li>`).join("")}</ol><p class="roadmap-caveat">Evidence availability is not a readiness or completion score. Clifford-rounded emulator runs do not establish correctness of the original circuits.</p></section>`;
   }
 
   function overview() {
@@ -575,14 +582,15 @@
     ].filter(Boolean).join(" ");
     return `<div class="overview-page"><div class="overview-heading"><h1>Resource overview</h1>
       <label class="field overview-mode"><span>Overview</span><select class="inset-select" id="overview-mode"><option value="candidate"${state.overviewMode === "candidate" ? " selected" : ""}>Selected application</option><option value="global"${state.overviewMode === "global" ? " selected" : ""}>Global overview - all applications</option></select></label>
+      ${editAction("edit", "Edit estimates")}
       ${state.overviewMode === "candidate" ? `<details class="snapshot-picker"><summary>Snapshot history</summary><div class="snapshot-options">
-        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / rev ${snapshot.revision + 1}${snapshot.local ? " / private database" : ""}</option>`).join("")}</select></label>
+        <label class="field"><span>Choose snapshot</span><select class="inset-select" id="snapshot-select">${ordered(item).reverse().map(snapshot => `<option value="${escape(snapshot.id)}"${snapshot.id === current.id ? " selected" : ""}>${dateLabel(snapshot.asOf)} / rev ${snapshot.revision + 1}${snapshot.local ? " / saved locally" : ""}</option>`).join("")}</select></label>
         <button type="button" class="text-button" data-action="history">View full revision history</button>
       </div></details>` : ""}</div>
       ${state.overviewMode === "global" ? globalOverview() : `<div class="overview-selection"><div class="candidate-controls">
         <label class="field"><span>Application candidate</span><select class="inset-select" id="candidate-select" title="${escape(item.name)}">${DATA.systems.filter(system => state.filter === "all" || String(system.id) === state.filter).map(system => `<optgroup label="${escape(systemLabel(system.id))}">${state.workloads.filter(candidate => candidate.system === system.id).map(candidate => `<option value="${escape(candidate.id)}"${candidate.id === item.id ? " selected" : ""}>${escape(candidateLabel(candidate))}</option>`).join("")}</optgroup>`).join("")}</select></label>
         <label class="field"><span>System</span><select id="system-filter" title="${escape(state.filter === "all" ? "All systems" : systemName(state.filter))}"><option value="all"${state.filter === "all" ? " selected" : ""}>All systems</option>${DATA.systems.map(system => `<option value="${system.id}"${state.filter === String(system.id) ? " selected" : ""}>${escape(systemLabel(system.id))}</option>`).join("")}</select></label>
-      </div></div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}<strong>${escape(item.name)}</strong> &middot; ${current.asOf ? `As of ${dateLabel(current.asOf)}` : "Estimate date not supplied"}${current.maturity !== "Unspecified" ? ` &middot; ${escape(current.maturity)}` : ""}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; private database" : ""}</p>
+      </div></div><p class="estimate-meta">${historical ? '<strong>Historical snapshot</strong> &middot; ' : ""}<strong>${escape(item.name)}</strong> &middot; ${current.asOf ? `As of ${dateLabel(current.asOf)}` : "Estimate date not supplied"}${current.maturity !== "Unspecified" ? ` &middot; ${escape(current.maturity)}` : ""}${historical ? ` &middot; revision ${current.revision + 1}` : ""}${current.local ? " &middot; saved locally" : ""}</p>
       ${overviewNotice(item, current)}
       <section class="overview-surface" id="selected-workload" aria-label="${escape(item.name)} logical resources">
         <div class="trend-grid">${[["logicalOps", "Logical operations"], ["logicalQubits", "Logical qubits"]].map(([key, label]) => `<section class="trend" aria-labelledby="${key}-heading"><h2 class="metric-label" id="${key}-heading">${label}</h2><div class="metric-value" data-metric="${key}" title="${group(current.metrics[key])}">${compact(current.metrics[key])}</div>${changeMarkup(item, key)}${chart(item, key, label)}</section>`).join("")}</div>
@@ -597,7 +605,7 @@
     const item = workload(state.selected), current = selectedSnapshot(item);
     return `<section class="sheet" id="snapshot-history"><div class="sheet-heading"><div><h2>${escape(candidateLabel(item))} &mdash; snapshot history</h2><p>Saved revisions are retained. Undated source records are not assigned artificial dates.</p></div><div class="history-head">${state.history ? `<label class="field-inline">Application<select id="history-workload">${state.workloads.map(row => `<option value="${row.id}"${row.id === item.id ? " selected" : ""}>${escape(candidateLabel(row))}</option>`).join("")}</select></label>` : ""}<button type="button" class="button small" data-action="toggle-history" aria-expanded="${state.history}" aria-controls="history-content">${state.history ? "Hide" : "Show"} history</button></div></div>
       <div id="history-content"${state.history ? "" : " hidden"}><div class="table-scroll"><table class="data-table history-table"><thead><tr><th scope="col">Estimate date</th><th scope="col">Assumptions</th><th scope="col">Logical operations</th><th scope="col">Logical qubits</th><th scope="col">Physical qubits</th><th scope="col">Runtime</th><th scope="col">Revision</th></tr></thead><tbody>
-        ${ordered(item).reverse().map(row => `<tr class="${row.id === current.id ? "is-current" : ""}"><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${dateLabel(row.asOf)}</a>${row.id === current.id ? '<span class="workload-date">Selected snapshot</span>' : ""}${row.local ? '<span class="workload-date">Private database</span>' : ""}</th><td><span class="basis-tag">${escape(row.config)}</span>${row.config !== current.config ? '<span class="workload-date">Different assumptions</span>' : ""}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${group(row.metrics.physicalQubits)}</td><td>${row.context.runtimeHours ? `${escape(row.context.runtimeHours)} h` : "Not supplied"}</td><td>${row.revision + 1}</td></tr>`).join("")}
+        ${ordered(item).reverse().map(row => `<tr class="${row.id === current.id ? "is-current" : ""}"><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, row))}">${dateLabel(row.asOf)}</a>${row.id === current.id ? '<span class="workload-date">Selected snapshot</span>' : ""}${row.local ? '<span class="workload-date">Saved locally</span>' : ""}</th><td><span class="basis-tag">${escape(row.config)}</span>${row.config !== current.config ? '<span class="workload-date">Different assumptions</span>' : ""}</td><td>${group(row.metrics.logicalOps)}</td><td>${group(row.metrics.logicalQubits)}</td><td>${group(row.metrics.physicalQubits)}</td><td>${row.context.runtimeHours ? `${escape(row.context.runtimeHours)} h` : "Not supplied"}</td><td>${row.revision + 1}</td></tr>`).join("")}
       </tbody></table></div><div class="table-foot"><p>Estimate date is not the save timestamp. Corrections do not erase prior revisions.</p><p>Comparison basis: ${escape(current.config)}</p></div></div></section>`;
   }
 
@@ -616,7 +624,7 @@
       const current = latest(item), share = gateShare(current), gap = targetGap(current);
       return `<tr><th scope="row" class="frozen"><span class="workload-button">${escape(candidateLabel(item))}</span></th><td>${escape(current.context.runtimeHours || "Not supplied")}${current.context.runtimeHours ? " h" : ""}</td><td>${current.context.targetPhysicalQubits ? `${compact(current.context.targetPhysicalQubits)} physical qubits<small>Current: ${compact(current.metrics.physicalQubits)} physical qubits</small>` : "Not supplied"}<small>${escape(current.context.targetWindow || "")}</small></td><td>${escape(gap.text)}<small>${gap.available ? escape(gap.detail) : "Needs engineering input"}</small></td><td>${share.text}<small>${current.context.gateBasisConfirmed ? "Classified logical gates" : "Confirm the gate basis"}</small></td><td>${escape(current.source)}<small>${escape(current.owner || "Owner not supplied")}</small></td></tr>`;
     }).join("");
-    return `<div class="page-heading"><div><h1>All resource metrics</h1><p>Eight independent applications. Latest supplied snapshot per row; no aggregate totals.</p></div></div>
+    return `<div class="page-heading"><div><h1>All resource metrics</h1><p>Eight independent applications. Latest supplied snapshot per row; no aggregate totals.</p></div>${editAction("edit", "Edit estimates")}</div>
       ${inlineInfo(`${escape(DATA.assumptions.emulator)} Physical operations retain the source's <strong>w/o move</strong> exclusion.`)}
       <section class="sheet"><div class="sheet-heading"><div><h2>Latest estimates</h2><p>All seven engineering counts, kept together.</p></div><div class="table-tools"><label class="check-label"><input type="checkbox" id="exact-values"${state.exact ? " checked" : ""}>Exact counts</label><label class="check-label"><input type="checkbox" id="show-ratios"${state.ratios ? " checked" : ""}>Show overhead ratios</label></div></div>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Latest estimates; scroll horizontally for more columns"><table class="data-table" id="all-metrics-table"><thead><tr class="column-group"><th class="frozen" rowspan="2" scope="col">Workload /<br>estimate date</th><th colspan="5" scope="colgroup">Operations</th><th colspan="2" scope="colgroup">Qubits</th>${state.ratios ? '<th colspan="2" scope="colgroup">Physical per logical</th>' : ""}</tr><tr>${header}${state.ratios ? '<th scope="col">Qubit overhead</th><th scope="col">Operation overhead</th>' : ""}</tr></thead><tbody>${rows}</tbody></table></div>
@@ -644,7 +652,7 @@
     const item = workload(id), snapshot = latest(item), axes = plotFields[kind];
     const available = isCount(snapshot.metrics[axes.x]) && isCount(snapshot.metrics[axes.y]);
     return `<strong>${escape(candidateLabel(item))}</strong><p>${escape(systemLabel(item.system))}</p>
-      <p>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.config)}${snapshot.maturity !== "Unspecified" ? ` &middot; ${escape(snapshot.maturity)}` : ""}${snapshot.local ? " &middot; private database" : ""}</p>
+      <p>${dateLabel(snapshot.asOf)} &middot; ${escape(snapshot.config)}${snapshot.maturity !== "Unspecified" ? ` &middot; ${escape(snapshot.maturity)}` : ""}${snapshot.local ? " &middot; saved locally" : ""}</p>
       <dl><div><dt>${axes.xLabel}</dt><dd data-exact-x>${group(snapshot.metrics[axes.x])}</dd></div><div><dt>${axes.yLabel}</dt><dd data-exact-y>${group(snapshot.metrics[axes.y])}</dd></div></dl>
       ${available ? "" : "<p>Not plotted: both counts are required. Missing values are not treated as zero.</p>"}
       <a data-nav href="${escape(candidateUrl(id, snapshot))}">Open this candidate / snapshot</a>`;
@@ -684,12 +692,12 @@
   }
 
   function compare() {
-    return `<div class="page-heading"><div><h1>Compare resource requirements</h1><p>All eight applications. Each point uses its latest supplied snapshot, regardless of the Overview filter.</p></div></div>
+    return `<div class="page-heading"><div><h1>Logical and physical resource requirements</h1><p>Resource footprint of all eight applications. Each point uses its latest supplied snapshot, regardless of the Overview filter.</p></div>${editAction("edit", "Edit estimates")}</div>
       ${inlineInfo("Different applications and configurations are not necessarily like-for-like. Physical operation counts are <strong>w/o move</strong>, not full transport-inclusive totals. Lower-left is not a performance ranking.")}
       <div class="compare-grid">${scatter("qubits")}${scatter("operations")}</div>
       <section class="sheet"><details class="definitions"><summary>Exact plot data, dates &amp; configurations (8 candidates)</summary>
       <div class="table-scroll" tabindex="0" role="region" aria-label="Exact plot counts; scroll for all columns"><table class="data-table compare-table" id="compare-data"><thead><tr><th scope="col">Application / date</th><th scope="col">Configuration</th><th scope="col">Logical qubits</th><th scope="col">Physical qubits</th><th scope="col">Logical operations</th><th scope="col">Physical ops (w/o move)</th></tr></thead><tbody>
-      ${state.workloads.map(item => { const snapshot = latest(item); return `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, snapshot))}">${escape(candidateLabel(item))}</a><span class="workload-date">${dateLabel(snapshot.asOf)}${snapshot.local ? " / private database" : ""}</span></th><td>${escape(snapshot.config)}</td>${["logicalQubits", "physicalQubits", "logicalOps", "physicalOps"].map(key => `<td>${group(snapshot.metrics[key])}</td>`).join("")}</tr>`; }).join("")}
+      ${state.workloads.map(item => { const snapshot = latest(item); return `<tr><th scope="row"><a data-nav href="${escape(candidateUrl(item.id, snapshot))}">${escape(candidateLabel(item))}</a><span class="workload-date">${dateLabel(snapshot.asOf)}${snapshot.local ? " / saved locally" : ""}</span></th><td>${escape(snapshot.config)}</td>${["logicalQubits", "physicalQubits", "logicalOps", "physicalOps"].map(key => `<td>${group(snapshot.metrics[key])}</td>`).join("")}</tr>`; }).join("")}
       </tbody></table></div><p class="support-caption">Counts remain exact integers. Plot coordinates and tick labels are rounded for display only. A zero is plotted at zero; an absent count is explicitly omitted, never imputed.</p></details></section>`;
   }
 
@@ -704,7 +712,6 @@
         navigationUrl = url;
         Object.assign(state, readLocation(url));
         for (const link of document.querySelectorAll("[data-route]")) link.href = urlFor(link.dataset.route);
-        for (const link of document.querySelectorAll("[data-mode]")) link.href = urlFor(link.dataset.mode === "engineering" ? "edit" : "overview");
       }
     }
     for (const element of main.querySelectorAll(`[data-plot="${kind}"]`)) element.setAttribute("aria-pressed", String(element.dataset.point === id));
@@ -722,14 +729,14 @@
   }
 
   function updates() {
-    return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>Recorded updates and sprint-based plans. Planning windows are not calendar commitments.</p></div></div>
+    return `<div class="page-heading"><div><h1>Updates &amp; outlook</h1><p>Recorded updates and sprint-based plans. Planning windows are not calendar commitments.</p></div>${editAction("write", "Edit updates or plans")}</div>
       <div class="updates-layout">
         <section class="sheet"><div class="sheet-heading"><div><h2>Since the last review</h2></div><span class="count-label">${activeUpdates().length} active / 4 maximum</span></div>
           <ul class="update-list">${activeUpdates().map(update => `<li data-update-id="${escape(update.id)}"><div class="update-meta">${scopeLink(update)}<span>&middot; ${dateLabel(update.date)} &middot; ${escape(update.owner)}</span></div><h3>${escape(update.title)}</h3><p class="written-prose">${escape(update.body)}</p>${requestMarkup(update)}</li>`).join("") || '<li>No written updates have been supplied.</li>'}</ul>
         </section>
         <section class="sheet"><div class="sheet-heading"><div><h2>What comes next</h2><p>Plans and targets &mdash; not completed results.</p></div></div>
           <ol class="milestones">
-            ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-window">${escape(milestoneWindow(milestone))}</div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(candidateName(milestone.targetCandidate))} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No outlook milestones have been supplied. Engineers can add sprint-based plans in the private workspace.</li>'}
+            ${activeMilestones().map(milestone => { const target = milestoneTarget(milestone); return `<li data-milestone-id="${escape(milestone.id)}"><div class="milestone-window">${escape(milestoneWindow(milestone))}</div><div><div class="update-meta">${scopeLink(milestone)} &middot; ${escape(milestone.owner)}</div><h3>${escape(milestone.title)}</h3><p class="written-prose">${escape(milestone.outcome)}</p>${target ? `<p data-linked-target="${escape(milestone.targetCandidate)}"><strong>Future objective, not a forecast:</strong> ${targetMarkup(target, true)} Basis: ${escape(target.context.targetConfig)}. Linked to the latest ${escape(candidateName(milestone.targetCandidate))} target.</p>` : ""}<span class="milestone-status">${escape(milestone.status)}</span>${milestone.dependencies ? `<p class="written-prose">Dependency / caveat: ${escape(milestone.dependencies)}</p>` : ""}</div></li>`; }).join("") || '<li>No outlook milestones have been supplied.</li>'}
           </ol>
           <div class="outlook-note">Plans are engineer-authored inputs, not extrapolated predictions. Linked targets use the candidate's latest estimate record; a snapshot link does not pin these written plans.</div>
         </section>
@@ -746,12 +753,12 @@
       ["runtime", "Estimated runtime", "Runtime estimate, optional range, and the timing, parallelism, scheduling, and hardware/error-correction assumptions behind it.", "Displayed as provided. Gate counts alone cannot determine elapsed time. The example range is not a statistical confidence interval.", "Resource details + All metrics", "Engineer input"],
       ["gates", "Non-Clifford gate share", "Confirm a common logical/physical level, non-overlapping categories, and a meaningful denominator before enabling the real calculation.", "Non-Clifford count as a share of the sum of the three classified gate counts. If the basis is unconfirmed, show Needs definition.", "Resource details + All metrics", "Definition + calculation"]
     ];
-    return `<div class="page-heading"><div><h1>What engineers need to provide</h1><p>One clear contract between the entry table and the leadership view.</p></div><a href="#edit" data-route="edit" class="button">Open entry table &rarr;</a></div>
+    return `<div class="page-heading"><div><h1>What engineers need to provide</h1><p>One clear contract between the entry table and the reading views.</p></div>${editAction("edit", "Edit estimates")}</div>
       ${inlineInfo(`<strong>Source limits.</strong> ${escape(DATA.assumptions.emulator)} ${escape(DATA.assumptions.interpretation)}`)}
       <section class="sheet"><div class="sheet-heading"><div><h2>Additional information: input or calculation?</h2><p>All six additions are included. Derived values are never typed manually.</p></div></div><div class="table-scroll" tabindex="0" role="region" aria-label="Engineering input requirements; scroll horizontally for more columns"><table class="data-table guide-table"><thead><tr><th scope="col">Information</th><th scope="col">Engineers supply</th><th scope="col">Dashboard calculates / displays</th><th scope="col">Where it appears</th></tr></thead><tbody>${rows.map(([id, title, supply, derive, where, type]) => `<tr id="guide-${id}" class="${state.guideHighlight === id ? "guide-highlight" : ""}"><th scope="row"><span class="guide-title">${escape(title)}</span>${inputBadge(type)}</th><td>${escape(supply)}</td><td>${escape(derive)}</td><td>${escape(where)}</td></tr>`).join("")}</tbody></table></div></section>
       <div class="guide-grid"><section class="sheet"><h2>The seven source counts stay unchanged</h2><p>Logical operations, physical operations, non-Clifford gates, 1-qubit Clifford, 2-qubit Clifford, logical qubits, and physical qubits. The input table accepts exact whole numbers and Excel paste. Both physical-to-logical overhead ratios are calculated from the same dated snapshot.</p></section><section class="sheet"><h2>Small amount of context, large reduction in questions</h2><p>For each saved update: confirm its date, write one change note, and review the relevant assumptions and source. Targets and timing models live in the expandable context section so they do not crowd routine count entry.</p></section></div>
-      <div class="full-row-note"><p><strong>One place for written context.</strong><br>Use Engineering &gt; Updates &amp; outlook for briefing bullets and sprint-based milestones. Counts and shared targets stay in Estimates.</p><a data-nav class="button" href="${escape(urlFor("write"))}">Open written editor</a></div>
-      <div class="full-row-note"><p><strong>Private database, public snapshot.</strong><br>The local workspace saves raw submissions and retained history to SQLite on this computer. Public Pages is read-only. The Leadership/Engineering switch is navigation, not authentication; a shared team service would need separate hosting and identity controls.</p></div>`;
+      <div class="full-row-note"><p><strong>One place for written context.</strong><br>Briefing bullets, requests and sprint-based plans live in Updates &amp; outlook. Counts and shared targets stay with the estimates.</p>${editAction("write", "Edit updates or plans")}</div>
+      <div class="full-row-note"><p><strong>Viewing and editing.</strong><br>Edit actions appear when this workspace is connected to its local save service. Saves retain raw submissions and revision history on this computer; the published review remains view only.</p></div>`;
   }
 
   function scopeOptions(value) {
@@ -790,7 +797,7 @@
 
   function writtenForm() {
     const draft = state.writtenDraft;
-    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Briefing bullets and milestones appear in Updates &amp; outlook. Saves in the private workspace retain raw input and earlier versions in SQLite.</p></section>`;
+    if (!draft) return `<section class="sheet written-empty"><h2>Choose an item to edit</h2><p>Briefing bullets and milestones appear in Updates &amp; outlook. Saves retain raw input and earlier versions.</p></section>`;
     const { kind, values } = draft;
     const field = (key, label, options = {}) => `<label class="field${options.wide ? " wide" : ""}"><span>${label}${options.required ? ' <span class="required">Required</span>' : ""}</span>${options.textarea ? `<textarea data-written="${key}" rows="3" maxlength="${options.max || 1000}">${escape(values[key] || "")}</textarea>` : `<input data-written="${key}" type="${options.type || "text"}" value="${escape(values[key] || "")}"${options.type === "date" ? "" : ` maxlength="${options.max || 120}"`}>`}${options.hint ? `<span class="field-hint">${options.hint}</span>` : ""}</label>`;
     const select = (key, label, options) => `<label class="field"><span>${label}</span><select data-written="${key}">${options.map(([value, text]) => `<option value="${escape(value)}"${values[key] === value ? " selected" : ""}>${escape(text)}</option>`).join("")}</select></label>`;
@@ -813,31 +820,41 @@
         ${field("request", "Action / decision needed", { wide: true, textarea: true, max: 600 })}
         ${field("requestWindow", "Sprint / horizon (optional)", { hint: "A planning window, not a calendar deadline." })}
       </div></details>` : ""}
-      <div class="save-bar"><div><strong>Private database save</strong><p>Saved records update this workspace, not public Pages.</p></div><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-written">Cancel</button><button type="submit" class="button primary">Save ${kind === "updates" ? "bullet" : "milestone"}</button></div></div></form></section>`;
+      <div class="save-bar"><div><strong>Save changes</strong><p>Updates this workspace; does not publish to the review site.</p></div><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-written">Cancel</button><button type="submit" class="button primary">Save ${kind === "updates" ? "bullet" : "milestone"}</button></div></div></form></section>`;
   }
 
   function write() {
+    if (!storage.connected) return readOnlyEditor("Updates & outlook - view only", "updates", "View updates & outlook");
     const kind = state.writePanel, records = state[kind].filter(record => !record.archived);
     const full = kind === "updates" && records.length >= 4;
-    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain the briefing and plans shown in the leadership Updates &amp; outlook tab.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">Read leadership view</a></div>
-      ${storageNotice()}
+    return `<div class="page-heading"><div><h1>Edit updates &amp; outlook</h1><p>Maintain the same briefing and plans shown in the reading view.</p></div><a class="button" data-nav href="${escape(urlFor("updates"))}">View updates &amp; outlook</a></div>
       <div class="writing-tabs" aria-label="Written content"><button type="button" class="button" data-action="writing-panel" data-kind="updates" aria-pressed="${kind === "updates"}">Briefing (${activeUpdates().length}/4 active)</button><button type="button" class="button" data-action="writing-panel" data-kind="milestones" aria-pressed="${kind === "milestones"}">Milestones (${activeMilestones().length})</button></div>
       <div class="writing-layout"><section class="sheet"><div class="sheet-heading"><div><h2>${kind === "updates" ? "Active briefing bullets" : "Active milestones"}</h2><p>${full ? "Four active bullets. Archive one to make room; nothing is dropped automatically." : kind === "updates" ? "Up/down controls set the leadership briefing order." : "Targets are linked to Estimates, never copied as separate numeric inputs."}</p></div><button type="button" class="button" data-action="new-written" data-kind="${kind}"${full ? " disabled" : ""}>Add ${kind === "updates" ? "bullet" : "milestone"}</button></div>
       <ol class="writing-list">${records.map((record, index) => `<li data-written-id="${escape(record.id)}"><h3>${escape(record.title)}</h3><p>${escape(scopeLabel(record.scope))} &middot; ${escape(record.owner)} &middot; ${kind === "updates" ? dateLabel(record.date) : escape(milestoneWindow(record))}</p><div class="record-actions"><button type="button" class="button small" data-action="edit-written" data-kind="${kind}" data-id="${escape(record.id)}">Edit<span class="sr-only"> ${escape(record.title)}</span></button><button type="button" class="button small" data-action="archive-written" data-kind="${kind}" data-id="${escape(record.id)}">Archive<span class="sr-only"> ${escape(record.title)}</span></button>${kind === "updates" ? `<button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="-1"${index === 0 ? " disabled" : ""} aria-label="Move ${escape(record.title)} up">Up</button><button type="button" class="button small" data-action="move-written" data-id="${escape(record.id)}" data-direction="1"${index === records.length - 1 ? " disabled" : ""} aria-label="Move ${escape(record.title)} down">Down</button>` : ""}</div></li>`).join("") || '<li>No active records. Add one or restore an archived record below.</li>'}</ol></section>${writtenForm()}</div>
       ${writtenHistory(kind, true)}`;
   }
 
+  function roadmapColorPreview(stage) {
+    const color = roadmapColor(stage);
+    return `<span class="stage-marker" data-color="${color}" aria-hidden="true"></span><div><strong>${escape(stage.title)}</strong><p>${roadmapColorLabel(stage)} &middot; Assessment: ${escape(stage.status)}</p></div>`;
+  }
+
   function roadmapEditor() {
+    if (!storage.connected) return readOnlyEditor("Application roadmap - view only", "overview", "View roadmap on Overview");
     if (!state.roadmapDraft) state.roadmapDraft = { id: state.roadmap[0].id, values: structuredClone(state.roadmap[0]), dirty: false };
     const draft = state.roadmapDraft, values = draft.values;
-    return `<div class="page-heading"><div><h1>Edit application roadmap</h1><p>Record evidence and readiness assessments explicitly; counts never mark a stage complete automatically.</p></div></div>${storageNotice()}
+    return `<div class="page-heading"><div><h1>Edit application roadmap</h1><p>Record evidence and readiness assessments explicitly; counts never mark a stage complete automatically.</p></div><a class="button" data-nav href="${escape(urlFor("overview"))}">View Overview</a></div>
       <section class="sheet"><form id="roadmap-form" class="writing-form" novalidate><label class="field"><span>Roadmap stage</span><select id="roadmap-stage">${state.roadmap.map(stage => `<option value="${stage.id}"${stage.id === draft.id ? " selected" : ""}>${escape(stage.title)}</option>`).join("")}</select></label>
       <div id="roadmap-errors" class="editor-errors" role="alert" hidden></div><div class="form-grid">
         <label class="field"><span>Status</span><select data-roadmap="status">${["Not assessed", "Evidence supplied", "In progress", "Blocked", "Complete"].map(status => `<option${status === values.status ? " selected" : ""}>${status}</option>`).join("")}</select></label>
         <label class="field"><span>Owner</span><input type="text" data-roadmap="owner" maxlength="120" value="${escape(values.owner)}"></label>
         <label class="field wide"><span>Evidence / caveat</span><textarea data-roadmap="note" rows="4" maxlength="2000">${escape(values.note)}</textarea></label>
         <label class="field wide"><span>Sprint / planning horizon (optional)</span><input type="text" data-roadmap="window" maxlength="120" value="${escape(values.window)}"></label>
-      </div><div class="save-bar"><p>A saved status appears on Overview and remains in database history.</p><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-roadmap">Cancel</button><button type="submit" class="button primary" id="save-roadmap">Save roadmap stage</button></div></div></form></section>`;
+        <fieldset class="roadmap-palette wide" aria-describedby="roadmap-color-help"><legend>Stage color</legend><p id="roadmap-color-help">Color is presentation only. Changing it does not change the assessment or evidence.</p>
+          <div class="roadmap-color-options">${[["default", `Use default (${roadmapColors[roadmapSourceDefaults[values.id]]})`], ...Object.entries(roadmapColors)].map(([color, label]) => `<label><input type="radio" name="roadmap-color" data-roadmap="color" value="${color}"${(values.color || "default") === color ? " checked" : ""}><span class="color-swatch" data-color="${color === "default" ? roadmapSourceDefaults[values.id] : color}" aria-hidden="true"></span><span>${label}</span></label>`).join("")}</div>
+          <div class="roadmap-color-preview" id="roadmap-color-preview" aria-live="polite">${roadmapColorPreview(values)}</div>
+        </fieldset>
+      </div><div class="save-bar"><p>Saved assessments and colors appear in both Overview modes and remain in revision history.</p><div class="save-bar-actions"><button type="button" class="button" data-action="cancel-roadmap">Cancel</button><button type="submit" class="button primary" id="save-roadmap">Save roadmap stage</button></div></div></form></section>`;
   }
 
   async function saveRoadmap() {
@@ -849,6 +866,7 @@
     if (!values.note) errors.push("Record the evidence or caveat for this status.");
     if (values.owner.length > 120 || values.window.length > 120 || values.note.length > 2000) errors.push("Owner/window must fit 120 characters; evidence must fit 2,000.");
     if (!["Not assessed", "Evidence supplied", "In progress", "Blocked", "Complete"].includes(values.status)) errors.push("Choose a supported roadmap status.");
+    if (!["default", ...Object.keys(roadmapColors)].includes(values.color ?? "default")) errors.push("Choose a listed stage color or Use default.");
     const box = document.getElementById("roadmap-errors");
     if (errors.length) {
       box.hidden = false;
@@ -860,17 +878,17 @@
     data.roadmap[index] = { ...values, savedAt: new Date().toISOString(), revisions: [...(before.revisions || []), recordVersion(before)] };
     if (!await persist(data, "roadmap", structuredClone(draft.values))) return;
     state.roadmapDraft = null;
-    state.notice = "Roadmap status saved to the private database and Overview.";
+    state.notice = "Roadmap assessment and color saved. Both Overview modes use this record.";
     state.noticeType = "success";
     render();
     announce(state.notice);
   }
 
   function records() {
-    return `<div class="page-heading"><div><h1>Raw engineering data</h1><p>Exact submitted values, save events and retained snapshot revisions.</p></div></div>${storageNotice()}
+    return `<div class="page-heading"><div><h1>Raw engineering data</h1><p>Exact submitted values, save events and retained snapshot revisions.</p></div></div>
       ${storage.error ? `<div class="inline-message error" role="alert">${escape(storage.error)}</div>` : ""}
-      ${storage.connected ? `<section class="sheet"><div class="sheet-heading"><div><h2>Private SQLite database</h2><p>Revision ${storage.revision} &middot; ${storage.total} raw submissions. The database stays on this computer.</p></div><div class="record-actions"><a class="button" href="/api/export" download>Export raw data (JSON)</a><a class="button" href="/api/database" download>Download database</a><button type="button" class="button" data-action="refresh-records">Refresh</button></div></div>
-      <div class="raw-records">${storage.records.map(record => `<details><summary>${escape(record.kind)} &middot; ${escape(record.savedAt)} &middot; record ${record.id}</summary><pre>${escape(JSON.stringify(record.raw, null, 2))}</pre></details>`).join("") || "<p>No raw submissions were returned.</p>"}</div><p class="history-note">Showing ${storage.records.length} of ${storage.total} submissions in import order. The JSON export and SQLite download contain the complete raw ledger. No private save automatically publishes to GitHub Pages.</p></section>` : '<section class="sheet"><div class="empty-state"><strong>The public site does not expose the raw-input database.</strong>Run the local workspace command documented in the repository README, then open this tab there. Exports and durable engineer saves are available only from that local service.</div></section>'}
+      ${storage.connected ? `<section class="sheet"><div class="sheet-heading"><div><h2>Saved input history</h2><p>Revision ${storage.revision} &middot; ${storage.total} raw submissions. Stored on this computer.</p></div><div class="record-actions"><a class="button" href="/api/export" download>Export raw data (JSON)</a><a class="button" href="/api/database" download>Download database</a><button type="button" class="button" data-action="refresh-records">Refresh</button></div></div>
+      <div class="raw-records">${storage.records.map(record => `<details><summary>${escape(record.kind)} &middot; ${escape(record.savedAt)} &middot; record ${record.id}</summary><pre>${escape(JSON.stringify(record.raw, null, 2))}</pre></details>`).join("") || "<p>No raw submissions were returned.</p>"}</div><p class="history-note">Showing ${storage.records.length} of ${storage.total} submissions in import order. Exports contain the complete raw ledger and are not published automatically.</p></section>` : '<section class="sheet"><div class="empty-state"><strong>The published review does not expose raw submissions or database exports.</strong>These are available in Raw data when connected to the local editing workspace. The supplied source references remain below.</div></section>'}
       <section class="sheet"><div class="sheet-heading"><h2>Supplied source records</h2></div><ul class="source-records">${DATA.sources.map(source => `<li><strong>${escape(source.description)}</strong><p>Source ID: ${escape(source.id)}</p><code>${source.sha256}</code></li>`).join("")}</ul><p class="history-note">Screenshots were received ${dateLabel(DATA.receivedDate)}. Receipt date is not the estimate date. The original supplied counts are stored as exact decimal strings.</p></section>`;
   }
 
@@ -926,7 +944,7 @@
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to the private database and Updates & outlook.${storage.error ? ` ${storage.error}` : ""}`;
+    state.notice = `${draft.kind === "updates" ? "Briefing bullet" : "Milestone"} saved to Updates & outlook.${storage.error ? ` ${storage.error}` : ""}`;
     render();
     main.focus({ preventScroll: true });
     window.scrollTo(0, 0);
@@ -950,7 +968,7 @@
     state.hasLocalChanges = true;
     state.writtenDraft = null;
     state.noticeType = "success";
-    state.notice = `${restore ? "Restored" : "Archived"} "${record.title}". Prior text and this action are retained in the private database.`;
+    state.notice = `${restore ? "Restored" : "Archived"} "${record.title}". Prior text and this action remain in history.`;
     render();
     announce(state.notice);
   }
@@ -967,7 +985,7 @@
     state.writtenDraft = null;
     render();
     main.querySelector(`[data-written-id="${id}"] [data-action="edit-written"]`).focus();
-    announce("Leadership briefing order saved to the private database.");
+    announce("Briefing order saved.");
   }
 
   function newDraft() {
@@ -1022,6 +1040,7 @@
   }
 
   function edit() {
+    if (!storage.connected) return readOnlyEditor("Resource estimates - view only", "metrics", "View resource metrics");
     if (!state.draft) state.draft = newDraft();
     const draft = state.draft;
     const checked = draft.checked.size;
@@ -1029,8 +1048,7 @@
       const row = draft.rows.get(item.id);
       return `<tr class="${draft.checked.has(item.id) ? "checked-row" : ""}" data-editor-row="${escape(item.id)}"><th scope="row" class="frozen"><label class="row-select"><input type="checkbox" data-row-check="${escape(item.id)}"${draft.checked.has(item.id) ? " checked" : ""}><span>${escape(candidateLabel(item))}</span></label></th>${fields.map((field, columnIndex) => `<td><input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-row="${rowIndex}" data-col="${columnIndex}" data-workload-id="${escape(item.id)}" data-field="${field.key}" aria-label="${escape(item.name)} ${escape(field.label)}" value="${escape(row.metrics[field.key])}"></td>`).join("")}</tr>`;
     }).join("");
-    return `<div class="page-heading editor-heading"><div><h1>Update resource estimates</h1><p>Paste exact counts or edit cells. Save keeps the original input and a normalized snapshot in the private database.</p></div><a href="#guide" data-route="guide" class="text-button">Input guide &rarr;</a></div>
-      ${storageNotice()}
+    return `<div class="page-heading editor-heading"><div><h1>Update resource estimates</h1><p>Paste exact counts or edit cells. Save retains the original input and snapshot history.</p></div><div class="editor-links"><a class="button" data-nav href="${escape(urlFor("metrics"))}">View resource metrics</a><a href="#guide" data-route="guide" class="text-button">Input guide</a></div></div>
       <section class="sheet" aria-label="Engineering entry table">
         <div class="edit-meta"><label class="field"><span>Estimate as of<span class="required">Required</span></span><input type="date" id="estimate-date" value="${escape(draft.asOf)}" required><span class="field-hint">The date these figures describe, not the time you save.</span></label><label class="field"><span>What changed?<span class="required">Required</span></span><input type="text" id="change-note" maxlength="400" value="${escape(draft.note)}" placeholder="Briefly explain the change and its implication." required><span class="field-hint">Applied to selected workloads. For different explanations, save separate batches.</span></label></div>
         <div class="editor-toolbar"><p>Select rows to save. Editing a cell selects its row automatically.</p><button class="text-button" type="button" data-action="paste-help" aria-expanded="false" aria-controls="paste-help">Excel paste help</button></div>
@@ -1045,34 +1063,23 @@
 
   function render() {
     const views = { overview, compare, metrics, updates, edit, write, roadmap: roadmapEditor, records, guide };
-    const engineering = engineeringRoutes.has(state.view);
-    const tabs = engineering ? [["edit", "Estimates"], ["write", "Updates & outlook"], ["roadmap", "Roadmap"], ["records", "Raw data"], ["guide", "Input guide"]]
-      : [["overview", "Overview"], ["compare", "Compare"], ["metrics", "All metrics"], ["updates", "Updates & outlook"]];
-    document.getElementById("view-navigation").innerHTML = tabs.map(([route, text]) => `<a data-route="${route}" href="${escape(urlFor(route))}"${state.view === route ? ' aria-current="page"' : ""}>${escape(text)}</a>`).join("");
-    document.getElementById("view-description").textContent = engineering ? storage.connected ? "Private database workspace" : "Read-only snapshot" : "";
-    document.querySelector(".brand").dataset.route = engineering ? "edit" : "overview";
+    const tabs = [["overview", "Overview"], ["compare", "Resource footprint"], ["metrics", "All metrics"], ["updates", "Updates & outlook"]];
+    if (storage.connected) tabs.push(["records", "Raw data"]);
+    document.getElementById("view-navigation").innerHTML = tabs.map(([route, text]) => `<a data-route="${route}" href="${escape(urlFor(route))}"${readingRoute(state.view) === route ? ' aria-current="page"' : ""}>${escape(text)}</a>`).join("");
+    document.getElementById("view-description").innerHTML = `<a class="guide-link" data-route="guide" href="${escape(urlFor("guide"))}"${state.view === "guide" ? ' aria-current="page"' : ""}>Input guide</a>`;
+    document.querySelector(".brand").dataset.route = "overview";
     main.innerHTML = state.urlError ? unavailableView() : `${state.notice ? `<div class="inline-message ${state.noticeType}" role="${state.noticeType === "error" ? "alert" : "status"}">${state.noticeType === "error" ? infoIcon : checkIcon}<p>${escape(state.notice)}</p></div>` : ""}${views[state.view]()}`;
     for (const link of document.querySelectorAll("[data-route]")) {
       link.href = urlFor(link.dataset.route);
       link.dataset.nav = "";
     }
-    for (const link of document.querySelectorAll("[data-mode]")) {
-      const selected = engineering ? "engineering" : "leadership";
-      link.href = urlFor(link.dataset.mode === "engineering" ? "edit" : "overview");
-      link.dataset.nav = "";
-      if (link.dataset.mode === selected) link.setAttribute("aria-current", "page");
-      else link.removeAttribute("aria-current");
-    }
     document.getElementById("share-action").disabled = Boolean(state.urlError);
     document.getElementById("share-action").classList.toggle("primary", state.view !== "overview");
-    document.body.dataset.storage = storage.connected ? "private" : "read-only";
+    document.body.dataset.storage = storage.connected ? "local" : "read-only";
     document.getElementById("storage-caption").textContent = storage.connected
-      ? "Private local SQLite workspace. Saves stay on this computer; they do not publish to the website."
-      : "Published source snapshot. No sign-in or public write access; private engineering data is stored separately.";
-    if (engineering && !storage.connected) {
-      for (const input of main.querySelectorAll('[data-field],[data-context],[data-row-check],#select-all-rows,#estimate-date,#change-note,#save-updates,[data-action="new-written"],[data-action="edit-written"],[data-action="archive-written"],[data-action="restore-written"],[data-action="move-written"],[data-roadmap],#save-roadmap')) input.disabled = true;
-    }
-    document.title = `${{ overview: "Overview", compare: "Compare", metrics: "All metrics", updates: "Updates & outlook", edit: "Engineering entry", write: "Written updates editor", roadmap: "Application roadmap", records: "Raw engineering data", guide: "Engineering input guide" }[state.view]} - Resource estimates`;
+      ? "Local editing workspace"
+      : "Published review - view only";
+    document.title = `${{ overview: "Overview", compare: "Resource footprint", metrics: "All metrics", updates: "Updates & outlook", edit: "Edit estimates", write: "Edit updates & outlook", roadmap: "Edit application roadmap", records: "Raw engineering data", guide: "Input guide" }[state.view]} - Resource estimates`;
   }
 
   function clearDrafts() {
@@ -1121,7 +1128,7 @@
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
       await navigator.clipboard.writeText(input.value);
-      status.textContent = "Published snapshot link copied. Private database edits are not included.";
+      status.textContent = "Published snapshot link copied. Locally saved changes are not included.";
     } catch (error) {
       status.textContent = "Automatic clipboard copy is unavailable in this browser context. Select and copy the link above manually.";
       input.focus();
@@ -1132,13 +1139,13 @@
   function shareView() {
     const snapshot = selectedSnapshot(workload(state.selected));
     const shareSnapshot = snapshot.local ? published(state.selected) : snapshot;
-    const view = state.view === "write" ? "updates" : engineeringRoutes.has(state.view) ? "overview" : state.view;
+    const view = editorRoutes.has(state.view) ? readingRoute(state.view) : ["records", "guide"].includes(state.view) ? "overview" : state.view;
     const url = new URL(urlFor(view, { snapshot: shareSnapshot.id }));
     const publishedUrl = new URL("https://rohit-2002-28.github.io/qdk-qce26-tutorial/resource-estimates/");
     publishedUrl.search = url.search;
     publishedUrl.hash = url.hash;
     document.getElementById("share-url").value = publishedUrl.href;
-    document.getElementById("share-copy").textContent = `${state.hasLocalChanges ? "This workspace contains private database records not available on the public website. " : ""}This link opens the supplied ${candidateName(state.selected)} snapshot: ${dateLabel(shareSnapshot.asOf)}, revision ${shareSnapshot.revision + 1}. It preserves the tab, system filter and global metric selection. Private counts, written notes and owner details are not serialized into the URL.`;
+    document.getElementById("share-copy").textContent = `${state.hasLocalChanges ? "Locally saved changes are not available in the published review. " : ""}This link opens the supplied ${candidateName(state.selected)} snapshot: ${dateLabel(shareSnapshot.asOf)}, revision ${shareSnapshot.revision + 1}. It preserves the tab, system filter and global metric selection. Saved counts, written notes and owner details are not included in the URL.`;
     document.getElementById("share-status").textContent = "";
     document.getElementById("share-dialog").showModal();
     void copyShareLink();
@@ -1271,7 +1278,7 @@
     state.hasLocalChanges = true;
     const names = prepared.map(row => candidateName(row.id)).join(", ");
     state.noticeType = "success";
-    state.notice = `Saved to the private database: ${names}. Estimate as of ${dateLabel(draft.asOf)}. ${historicalCount ? "Backdated records were added to history; later-dated estimates remain current. " : ""}Raw inputs, revisions and charts are synchronized. Public Pages is unchanged.${storage.error ? ` ${storage.error}` : ""}`;
+    state.notice = `Saved: ${names}. Estimate as of ${dateLabel(draft.asOf)}. ${historicalCount ? "Backdated records were added to history; later-dated estimates remain current. " : ""}Raw inputs, revisions and charts are synchronized. The published review is unchanged.${storage.error ? ` ${storage.error}` : ""}`;
     state.draft = null;
     commitNavigation("overview");
     announce(state.notice);
@@ -1475,8 +1482,14 @@
 
   main.addEventListener("input", event => {
     if (event.target.dataset.roadmap && state.roadmapDraft) {
+      if (event.target.type === "radio" && !event.target.checked) return;
       state.roadmapDraft.values[event.target.dataset.roadmap] = event.target.value;
       state.roadmapDraft.dirty = true;
+      if (["color", "status"].includes(event.target.dataset.roadmap)) {
+        const values = state.roadmapDraft.values;
+        document.getElementById("roadmap-color-preview").innerHTML = ["default", ...Object.keys(roadmapColors)].includes(values.color ?? "default")
+          ? roadmapColorPreview(values) : "<p>Choose a listed stage color or Use default.</p>";
+      }
       return;
     }
     if (captureWritten(event.target)) return;
